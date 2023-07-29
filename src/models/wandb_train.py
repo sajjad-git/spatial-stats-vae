@@ -48,7 +48,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         transforms.Resize([res_size, res_size]),
         ThresholdTransform(thr_255=240),
     ])
-    dataset = CustomDataset(os.path.join(os.getcwd(), 'data/raw/labels.csv'), os.path.join(os.getcwd(), 'data/raw/shape_images'), transform)
+    dataset = CustomDataset(os.path.join(os.getcwd(), '../drive/MyDrive/argonne/labels.csv'), os.path.join(os.getcwd(), '../drive/MyDrive/argonne/shape_images'), transform)
+    #dataset = CustomDataset(os.path.join(os.getcwd(), 'data/raw/labels.csv'), os.path.join(os.getcwd(), 'data/raw/shape_images'), transform)
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*0.7), int(len(dataset)) - int(len(dataset)*0.7)])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
