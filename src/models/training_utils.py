@@ -77,7 +77,10 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         if (batch_idx + 1) % log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
-        
+       
+        if batch_idx > 2:
+            break        
+
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
     all_z = np.stack(all_z, axis=0)
