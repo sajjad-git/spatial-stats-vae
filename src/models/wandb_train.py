@@ -90,10 +90,6 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta)
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta)
         
-        training_losses = validation_losses = [100-epoch, 100-epoch,100-epoch,100-epoch,100-epoch,100-epoch]
-        if epoch > 35:
-            training_losses = validation_losses = [100+epoch, 100+epoch,100+epoch,100+epoch,100+epoch,100+epoch]
-        # test_loss = [0,1,0.5,2,5]
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
         metrics = {
@@ -103,12 +99,16 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             "spatial_stats_training_loss": spst_training_loss,
             "KLD_training_loss": kld_training_loss,
             "overall_training_loss": overall_training_loss,
+            "mu_training": mu_train,
+            "logvar_train": logvar_train,
             "mse_validation_loss": mse_loss, 
             "content_validation_loss": content_loss, 
             "style_validation_loss": style_loss,
             "spatial_stats_validation_loss": spst_loss,
             "KLD_validation_loss": kld_loss,
             "overall_validation_loss": overall_loss,
+            "mu_test": mu_test,
+            "logvar_test": logvar_test,
             }
         
         wandb.log(metrics)
