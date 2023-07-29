@@ -13,16 +13,18 @@ import sys
 sys.path.insert(1, '../data')
 from make_circles_squares_dataset import CustomDataset
 from utils import ThresholdTransform, check_mkdir
-from training_utils import train, validation, MaterialSimilarityLoss
+from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, seed_everything, generate_from_noise, generate_reconstructions
 
 
-def run_training(epochs, a_content, a_style, a_spst, beta, content_layer, style_layer,
+def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
                 learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
                   dropout_p=0.2, log_interval=2, save_interval=10, resume_training=False, last_epoch=None):
-
+    seed=110
+    seed_everything(seed)
+    
     save_dir = os.path.join(os.getcwd(), "models")
-    save_model_path = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_loss_content" + str(a_content) + "_style" + str(a_style) + "_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}"
-    save_model_path = os.path.join(save_dir, save_model_path)
+    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}"
+    save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
 
     # alternatively, you could save in W&B but depending on the network speed, uploading the models can be slow.
@@ -58,7 +60,14 @@ def run_training(epochs, a_content, a_style, a_spst, beta, content_layer, style_
     resnet_vae.resnet.requires_grad_(False)
     model_params = list(resnet_vae.parameters())
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
+    beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer)
+    wandb.log({
+        "seed": seed,
+        "run_name": run_name, 
+        "content_layer_coeffs": loss_function.content_layer_coefficients,
+        "style_layer_coeffs": loss_function.style_layer_coefficients,
+        })
     wandb.watch(resnet_vae)
     
     if resume_training:
@@ -73,22 +82,37 @@ def run_training(epochs, a_content, a_style, a_spst, beta, content_layer, style_
     #start training
     for epoch in range(last_epoch, epochs):
         start = time.time()
+
+        # get the scheduled KLD beta value
+        beta = beta_scheduler.get_beta(epoch)
+
         # train, test model
-        X_train, y_train, z_train, mu_train, logvar_train, train_loss = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_content, a_style, a_spst, beta)
-        X_test, y_test, z_test, mu_test, logvar_test, test_loss = validation(resnet_vae, loss_function, device, valid_loader, a_content, a_style, a_spst, beta)
+        X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta)
+        X_test, y_test, z_test, mu_test, logvar_test, validation_losses = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta)
         
+        training_losses = validation_losses = [100-epoch, 100-epoch,100-epoch,100-epoch,100-epoch,100-epoch]
+        if epoch > 35:
+            training_losses = validation_losses = [100+epoch, 100+epoch,100+epoch,100+epoch,100+epoch,100+epoch]
         # test_loss = [0,1,0.5,2,5]
-        content_loss, style_loss, spst_loss, kld_loss, overall_loss = test_loss
-        metrics = {"content_loss": content_loss, 
-               "style_loss": style_loss,
-                "spatial_stats_loss": spst_loss,
-                "KLD_loss": kld_loss,
-                "overall_loss": overall_loss}
+        mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
+        mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
+        metrics = {
+            "mse_training_loss": mse_training_loss, 
+            "content_training_loss": content_training_loss, 
+            "style_training_loss": style_training_loss,
+            "spatial_stats_training_loss": spst_training_loss,
+            "KLD_training_loss": kld_training_loss,
+            "overall_training_loss": overall_training_loss,
+            "mse_validation_loss": mse_loss, 
+            "content_validation_loss": content_loss, 
+            "style_validation_loss": style_loss,
+            "spatial_stats_validation_loss": spst_loss,
+            "KLD_validation_loss": kld_loss,
+            "overall_validation_loss": overall_loss,
+            }
         
         wandb.log(metrics)
-        # X_train = np.array([0, 0])
-        # y_train = np.array([0, 0])
-        # z_train = np.array([0, 0])
+
         if (epoch+1)%10==0:
             torch.save(resnet_vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
             torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
@@ -96,10 +120,23 @@ def run_training(epochs, a_content, a_style, a_spst, beta, content_layer, style_
             np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
             np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
             np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
+        
+            training_reconstructed_figures = generate_reconstructions(resnet_vae, device, X_train, z_train)
+            for ind, fig in enumerate(training_reconstructed_figures):
+                wandb.log({f'epoch {epoch} training reconstruction {ind}': fig })
+
+            validation_reconstructed_figures = generate_reconstructions(resnet_vae, device, X_test, z_test)
+            for ind, fig in enumerate(validation_reconstructed_figures):
+                wandb.log({f'epoch {epoch} validation reconstruction {ind}': fig })
+            
+            validation_generated_figures = generate_from_noise(resnet_vae, device, 10)
+            for ind, fig in enumerate(validation_generated_figures):
+                wandb.log({f'epoch {epoch} generated image {ind} from random normal noise': fig })
+
         print(f"epoch time elapsed {time.time() - start} seconds")
         print("-------------------------------------------------")
     
-    print("Finished training!")
+    print(f"Finished training for {run_name}.")
 
 
 

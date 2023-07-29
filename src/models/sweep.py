@@ -10,11 +10,10 @@ def main():
     wandb.init(project='sweep-vae-loss-alphas-and-neural-layers')
     
     config = wandb.config
-    beta = 1 - (config.a_content + config.a_style + config.a_spst)
-    content_layer = f"conv_{config.content_layer}"
-    style_layer = f"conv_{config.style_layer}"
-    run_training(config.epochs, config.a_content, config.a_style, config.a_spst, beta, 
-                     content_layer, style_layer) 
+    beta_max = 0.15
+    #beta_max = 1 - (config.a_mse + config.a_content + config.a_style + config.a_spst) # beta is scheduled. it will go from 0.005 to beta_max
+    run_training(config.epochs, config.a_mse, config.a_content, config.a_style, config.a_spst, beta_max, 
+                     config.content_layer, config.style_layer) 
     
 if __name__=="__main__":
     # parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
@@ -25,7 +24,7 @@ if __name__=="__main__":
 
     # Load the YAML configuration file
     #with open("sweep_config.yaml", "r") as yaml_file:
-    with open(os.path.join(os.getcwd(), "src/models/test.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/sweep_config.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep
