@@ -72,7 +72,7 @@ class VGG19Pipeline(nn.Module):
     def __init__(self, device):
         super(VGG19Pipeline, self).__init__()
         # import the pretrained network
-        self.cnn = models.vgg19(pretrained=True).features.eval()
+        self.cnn = models.vgg19(weights="VGG19_Weights.DEFAULT").features.eval()
         for p in self.cnn.parameters():
             p.requires_grad = False
 

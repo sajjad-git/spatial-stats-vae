@@ -44,7 +44,7 @@ class ResNet_VAE(nn.Module):
                                        device)
 
         # encoding components
-        resnet = models.resnet152(pretrained=True)
+        resnet = models.resnet152(weights="ResNet152_Weights.DEFAULT")
         modules = list(resnet.children())[:-1]      # delete the last fc layer.
         self.resnet = nn.Sequential(*modules)
         self.fc1 = nn.Linear(resnet.fc.in_features, self.fc_hidden1)
