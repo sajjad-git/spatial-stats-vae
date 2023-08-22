@@ -1,5 +1,5 @@
 program: sweep.py
-method: grid
+method: random
 metric:
   goal: minimize
   name: overall_validation_loss
