@@ -11,7 +11,6 @@ from spatial_statistics_loss import TwoPointSpatialStatsLoss
 from neural_style_transfer_loss import ContentLoss, StyleLoss
 from loss_coefficients import normal_dist_coefficients
 
-import matplotlib.pyplot as plt
 
 class MaterialSimilarityLoss(nn.Module):
 
@@ -19,6 +18,8 @@ class MaterialSimilarityLoss(nn.Module):
         """
         content_layer (int) is the layer that will be focused on the most;
         Same with the style layer.
+        1 <= content_layer <= 5
+        1 <= style_layer <= 5
         """
         super(MaterialSimilarityLoss, self).__init__()
 
@@ -78,6 +79,10 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
+        # # DELETE
+        # if batch_idx > 0:
+        #         break
+        
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
     all_z = np.stack(all_z, axis=0)
@@ -87,11 +92,10 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses
 
 
-
-def validation(model, criterion, device, test_loader, a_content, a_style, a_spst, beta):
+def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta):
     # set model as testing mode
     model.eval()
-    losses = np.zeros(shape=(len(test_loader), 5))
+    losses = np.zeros(shape=(len(test_loader), 6))
 
     all_y, all_z, all_mu, all_logvar = [], [], [], []
     with torch.no_grad():
@@ -100,13 +104,17 @@ def validation(model, criterion, device, test_loader, a_content, a_style, a_spst
             X, y = X.to(device), y.to(device).view(-1, )
             X_reconst, z, mu, logvar = model(X)
 
-            mse, content, style, spst, kld, loss = criterion(X_reconst, X, mu, logvar, a_content, a_style, a_spst, beta)
+            mse, content, style, spst, kld, loss = criterion(X_reconst, X, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
             losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
 
             all_y.extend(y.data.cpu().numpy())
             all_z.extend(z.data.cpu().numpy())
             all_mu.extend(mu.data.cpu().numpy())
             all_logvar.extend(logvar.data.cpu().numpy())
+            
+            # # DELETE
+            # if batch_idx > 0:
+            #     break
             
     losses = losses.mean(axis=0)
 
@@ -128,39 +136,24 @@ def decoder(model, device, z):
 
 
 def generate_reconstructions(model, device, X, z):
-    figures = []
+    #figures = []
+    imgs = []
     for ind in range(len(X)):
-        zz = z[ind].view(1, -1)
-        xx = X[ind].detach().cpu().numpy()
-        xx = np.transpose(xx, (1, 2, 0))
-
-        generated_images_pytorch = decoder(model, device, zz)
-        fig = plt.figure(figsize=(10, 10))
-        plt.subplot(1, 2, 1)
-        plt.imshow(xx)
-        plt.title('original')
-        plt.axis('off')
-
-        plt.subplot(1, 2, 2)
-        plt.imshow(generated_images_pytorch[0][0])
-        plt.title('reconstructed')
-        plt.axis('off')
-        figures.append(fig)
-
-    return figures
-
+        zz = z[ind].reshape((1, -1))
+        xx = X[ind]
+        generated_image_pytorch = decoder(model, device, zz)
+        generated_image_np = generated_image_pytorch[0]
+        tgther = torch.concat([torch.tensor(xx), generated_image_np], dim=1)
+        imgs.append(tgther)
+    return imgs
 
 def generate_from_noise(model, device, num_imgs):
-    figures = []
+    generated_images = []
     for _ in range(num_imgs):
         zz = torch.normal(0, 1, size=(1, 256))
         img = decoder(model, device, zz)
-        fig = plt.figure(figsize=(5, 5))
-        plt.imshow(img[0][0])
-        plt.title('Generated Images')
-        plt.axis('off')
-        figures.append(fig)
-    return figures
+        generated_images.append(img[0])
+    return generated_images
 
 
 def seed_everything(seed: int):    
