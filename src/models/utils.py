@@ -13,8 +13,8 @@ class Normalization(nn.Module):
         # .view the mean and std to make them [C x 1 x 1] so that they can
         # directly work with image Tensor of shape [B x C x H x W].
         # B is batch size. C is number of channels. H is height and W is width.
-        self.mean = torch.tensor(mean.clone().detach().requires_grad_(True)).view(-1, 1, 1).to(device)
-        self.std = torch.tensor(std.clone().detach().requires_grad_(True)).view(-1, 1, 1).to(device)
+        self.mean = mean.clone().detach().requires_grad_(True).view(-1, 1, 1).to(device)
+        self.std = std.clone().detach().requires_grad_(True).view(-1, 1, 1).to(device)
 
     def forward(self, img):
         # normalize ``img``
