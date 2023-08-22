@@ -6,6 +6,8 @@ metric:
 parameters:
   epochs:
     values: [1,2]
+  a_mse:
+    value: 0.2
   a_content:
     value: 0.195
   a_style:
