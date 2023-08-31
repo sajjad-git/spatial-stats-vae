@@ -17,7 +17,7 @@ from training_utils import train, validation, MaterialSimilarityLoss, Exponentia
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
-                learning_rate=1e-3, batch_size=2, CNN_embed_dim=256,
+                learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
                   dropout_p=0.2, log_interval=2, save_interval=10, resume_training=False, last_epoch=None):
     seed=110
     seed_everything(seed)
@@ -112,8 +112,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             }
         wandb.log(metrics)
         # if epoch > 0:
-        #if (epoch+1)%10==0:
-        if epoch > 0:
+        if (epoch+1)%10==0:
             torch.save(resnet_vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
             torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
             np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
