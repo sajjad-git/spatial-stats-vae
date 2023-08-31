@@ -79,9 +79,9 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
-        # # DELETE
-        # if batch_idx > 0:
-        #         break
+        # DELETE
+        if batch_idx > 0:
+                break
         
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
@@ -112,9 +112,9 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             all_mu.extend(mu.data.cpu().numpy())
             all_logvar.extend(logvar.data.cpu().numpy())
             
-            # # DELETE
-            # if batch_idx > 0:
-            #     break
+            # DELETE
+            if batch_idx > 0:
+                break
             
     losses = losses.mean(axis=0)
 

@@ -24,7 +24,7 @@ if __name__=="__main__":
 
     # Load the YAML configuration file
     #with open("sweep_config.yaml", "r") as yaml_file:
-    with open(os.path.join(os.getcwd(), "src/models/sweep_config.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/test.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep
