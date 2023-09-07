@@ -17,8 +17,8 @@ from training_utils import train, validation, MaterialSimilarityLoss, Exponentia
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
-                learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
-                  dropout_p=0.2, log_interval=2, save_interval=10, resume_training=False, last_epoch=None):
+                learning_rate=1e-3, batch_size=2, CNN_embed_dim=256,
+                  dropout_p=0.2, log_interval=32, save_interval=10, resume_training=False, last_epoch=None):
     seed=110
     seed_everything(seed)
     
@@ -84,7 +84,9 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         start = time.time()
 
         # get the scheduled KLD beta value
-        beta = beta_scheduler.get_beta(epoch)
+        # TODO: Test the effect of the scheduler on our results
+        #beta = beta_scheduler.get_beta(epoch)
+        beta=1
 
         # train, test model
         X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta)
@@ -142,7 +144,10 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
 
         print(f"epoch time elapsed {time.time() - start} seconds")
         print("-------------------------------------------------")
-    
+
+        # if epoch > 0:
+        #     break
+
     print(f"Finished training for {run_name}.")
 
 

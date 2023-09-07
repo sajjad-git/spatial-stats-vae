@@ -2,3 +2,5 @@
 /data
 wandb
 src/models/__pycache__/
+src/data/raw
+models

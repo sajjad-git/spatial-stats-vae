@@ -16,19 +16,25 @@ def main():
                      config.content_layer, config.style_layer) 
     
 if __name__=="__main__":
-    # parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
-    # parser.add_argument('--api_key', type=str, required=True, help="W&B api key.")
-    # args = parser.parse_args()
-
+    parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
+    parser.add_argument('--sweep_id', type=str, required=False, default=None, help="W&B sweep ID")
+    args = parser.parse_args()
+    
+    # 1: login
     wandb.login()
 
-    # Load the YAML configuration file
-    with open(os.path.join(os.getcwd(), "src/models/sweep_config.yaml"), "r") as yaml_file:
+    # 2: Load the YAML configuration file
+    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_0.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep
-    sweep_id = wandb.sweep(
-        sweep=sweep_configuration, 
-        project='sweep-vae-loss-alphas-and-neural-layers'
-        )
-    wandb.agent(sweep_id, function=main)
+    if args.sweep_id != None:
+        # provide a sweep id
+        sweep_id = args.sweep_id
+    else:
+        sweep_id = wandb.sweep(
+            sweep=sweep_configuration, 
+            project='sweep-vae-loss-alphas-and-neural-layers',
+            )
+    print(sweep_id)
+    wandb.agent(sweep_id, function=main, project='sweep-vae-loss-alphas-and-neural-layers')
