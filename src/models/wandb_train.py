@@ -66,8 +66,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     print({
         "seed": seed,
         "run_name": run_name, 
-        "content_layer_coeffs": loss_function.content_layer_coefficients,
-        "style_layer_coeffs": loss_function.style_layer_coefficients,
+        #"content_layer_coeffs": loss_function.content_layer_coefficients,
+        #"style_layer_coeffs": loss_function.style_layer_coefficients,
         })
     
     if resume_training:
@@ -113,7 +113,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             "logvar_test": logvar_test,
             }
         wandb.log(metrics)
-        # if epoch > 0:
+        
         if (epoch+1)%10==0:
             torch.save(resnet_vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
             torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer

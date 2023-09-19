@@ -23,19 +23,23 @@ class MaterialSimilarityLoss(nn.Module):
         """
         super(MaterialSimilarityLoss, self).__init__()
 
-        self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
-        self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
+        #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
+        #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         self.spst_loss = TwoPointSpatialStatsLoss()
-        self.content_layer_coefficients = normal_dist_coefficients(content_layer)
-        self.style_layer_coefficients = normal_dist_coefficients(style_layer)
+        #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
+        #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
     def forward(self, recon_x, x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
         MSE = F.mse_loss(recon_x, x)
-        CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
-        STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
+        #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
+        #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
+        #-------DELETE LATER--------
+        CONTENTLOSS=torch.Tensor([0])
+        STYLELOSS=torch.Tensor([0])
+        #---------------------------
         SPST = self.spst_loss(recon_x, x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        overall_loss = a_mse*MSE + a_content*CONTENTLOSS + a_style*STYLELOSS + a_spst*SPST + beta*KLD
+        overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS 
         return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, overall_loss
 
 
@@ -65,7 +69,6 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         X_reconst, z, mu, logvar = model(X)  # VAE
         mse, content, style, spst, kld, loss = criterion(X_reconst, X, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
         losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
-
         loss.backward()
         optimizer.step()
 
@@ -80,7 +83,7 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
         # # DELETE
-        # if batch_idx > 10:
+        # if batch_idx > 1:
         #     break
         
     losses = losses.mean(axis=0)
@@ -112,8 +115,8 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             all_mu.extend(mu.data.cpu().numpy())
             all_logvar.extend(logvar.data.cpu().numpy())
             
-            # DELETE
-            # if batch_idx > 10:
+            # #DELETE
+            # if batch_idx > 1:
             #     break
             
     losses = losses.mean(axis=0)
@@ -142,8 +145,8 @@ def generate_reconstructions(model, device, X, z):
         zz = z[ind].reshape((1, -1))
         xx = X[ind]
         generated_image_pytorch = decoder(model, device, zz)
-        generated_image_np = generated_image_pytorch[0]
-        tgther = torch.concat([torch.tensor(xx), generated_image_np], dim=1)
+        generated_image_torch = generated_image_pytorch[0]
+        tgther = torch.concat([torch.tensor(xx), generated_image_torch], dim=1)
         imgs.append(tgther)
     return imgs
 
