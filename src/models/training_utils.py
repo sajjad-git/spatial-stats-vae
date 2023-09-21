@@ -34,8 +34,8 @@ class MaterialSimilarityLoss(nn.Module):
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
         #-------DELETE LATER--------
-        CONTENTLOSS=torch.Tensor([0], device=self.device)
-        STYLELOSS=torch.Tensor([0], device=self.device)
+        CONTENTLOSS=torch.Tensor([0]).to(self.device)
+        STYLELOSS=torch.Tensor([0]).to(self.device)
         #---------------------------
         SPST = self.spst_loss(recon_x, x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
