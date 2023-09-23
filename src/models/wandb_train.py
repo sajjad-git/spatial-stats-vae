@@ -17,8 +17,8 @@ from training_utils import train, validation, MaterialSimilarityLoss, Exponentia
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
-                learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
-                  dropout_p=0.2, log_interval=32, save_interval=10, resume_training=True, last_epoch=30):
+                learning_rate=1e-4, batch_size=32, CNN_embed_dim=256,
+                  dropout_p=0.2, log_interval=32, save_interval=10, resume_training=False, last_epoch=0):
     seed=110
     seed_everything(seed)
     
