@@ -139,16 +139,22 @@ def decoder(model, device, z):
 
 
 def generate_reconstructions(model, device, X, z):
-    #figures = []
     imgs = []
     for ind in range(len(X)):
         zz = z[ind].reshape((1, -1))
         xx = X[ind]
         generated_image_pytorch = decoder(model, device, zz)
         generated_image_torch = generated_image_pytorch[0]
-        tgther = torch.concat([torch.tensor(xx), generated_image_torch], dim=1)
+
+        # Ensure both images are on the same scale
+        xx = (xx - xx.min()) / (xx.max() - xx.min())
+        generated_image_torch = (generated_image_torch - generated_image_torch.min()) / \
+                                (generated_image_torch.max() - generated_image_torch.min())
+        
+        tgther = torch.cat([xx, generated_image_torch], dim=1)
         imgs.append(tgther)
     return imgs
+
 
 def generate_from_noise(model, device, num_imgs):
     generated_images = []
