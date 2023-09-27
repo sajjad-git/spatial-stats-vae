@@ -151,7 +151,7 @@ def generate_reconstructions(model, device, X, z):
         generated_image_torch = (generated_image_torch - generated_image_torch.min()) / \
                                 (generated_image_torch.max() - generated_image_torch.min())
         
-        tgther = torch.cat([xx, generated_image_torch], dim=1)
+        tgther = torch.cat([torch.tensor(xx), generated_image_torch], dim=1)
         imgs.append(tgther)
     return imgs
 
