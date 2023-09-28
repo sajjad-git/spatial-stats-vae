@@ -6,6 +6,8 @@ metric:
 parameters:
   epochs:
     value: 60
+  learning_rate:
+    value: 0.001
   a_mse:
     value: 0.15
   a_content:

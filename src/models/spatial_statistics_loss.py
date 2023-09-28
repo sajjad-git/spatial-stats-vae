@@ -96,7 +96,7 @@ def two_point_autocorr_pytorch(imgs, H=2):
 class TwoPointSpatialStatsLoss(nn.Module):
     def __init__(self):
         super(TwoPointSpatialStatsLoss, self).__init__()
-        self.mse_loss = nn.MSELoss()
+        self.mse_loss = nn.MSELoss(reduction='sum')
 
     def forward(self, input, target):
         input_autocorr = two_point_autocorr_pytorch(input)
