@@ -23,7 +23,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "sum_reduction"
+    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "_sum_reduction"
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
 
