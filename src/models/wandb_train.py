@@ -18,12 +18,12 @@ from training_utils import train, validation, MaterialSimilarityLoss, Exponentia
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
                 learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
-                  dropout_p=0.2, log_interval=2, save_interval=50, resume_training=True, last_epoch=120):
+                  dropout_p=0.2, log_interval=2, save_interval=50, resume_training=False, last_epoch=0):
     seed=110
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}"
+    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "sum_reduction"
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
 

@@ -5,7 +5,7 @@ metric:
   name: overall_loss
 parameters:
   epochs:
-    value: 300
+    value: 60
   a_mse:
     value: 0.15
   a_content:

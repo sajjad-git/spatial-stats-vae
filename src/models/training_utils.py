@@ -30,7 +30,7 @@ class MaterialSimilarityLoss(nn.Module):
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
     def forward(self, recon_x, x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
-        MSE = F.mse_loss(recon_x, x)
+        MSE = F.mse_loss(recon_x, x, reduction='sum')
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
         #-------DELETE LATER--------
