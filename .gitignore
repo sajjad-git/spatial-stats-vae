@@ -1,6 +1,6 @@
-.DS_Store
+DS_Store
 /data
 wandb
 src/models/__pycache__/
 src/data/raw
-models
+./models
