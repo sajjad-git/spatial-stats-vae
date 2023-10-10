@@ -13,17 +13,17 @@ import sys
 sys.path.insert(1, '../data')
 from make_circles_squares_dataset import CustomDataset
 from utils import ThresholdTransform, check_mkdir
-from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, seed_everything, generate_from_noise, generate_reconstructions
+from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, seed_everything, generate_from_noise, generate_reconstructions
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
-                learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
-                  dropout_p=0.2, log_interval=2, save_interval=30, resume_training=False, last_epoch=0):
+                learning_rates=(1e-3, 1e-3), batch_size=32, CNN_embed_dim=256,
+                  dropout_p=0.2, log_interval=2, save_interval=20, resume_training=False, last_epoch=0):
     seed=110
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "_sum_reduction"
+    run_name = "resnetVAE_shapesData_" + f"lr{learning_rates}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "_sum_reduction"
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
 
@@ -60,9 +60,12 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     resnet_vae.resnet.requires_grad_(False)
     wandb.watch(resnet_vae)
     model_params = list(resnet_vae.parameters())
+    learning_rate = learning_rate_switcher(epochs, 0, learning_rates)
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer)
+    a_spst_scheduler = LossCoefficientScheduler(a_spst, epochs)
+
     print({
         "seed": seed,
         "run_name": run_name, 
@@ -88,12 +91,21 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         #beta = beta_scheduler.get_beta(epoch)
         beta=1
 
+        # switch the optimizer learning rate
+        lr = learning_rate_switcher(epochs, epoch, learning_rates)
+        for g in optimizer.param_groups:
+            g['lr'] = lr
+
         # train, test model
         X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta)
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta)
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
         
+        # increase spst loss value
+        a_spst = a_spst_scheduler.step()
+        a_mse = 1 - a_spst
+
         metrics = {
             "mse_training_loss": mse_training_loss, 
             "content_training_loss": content_training_loss, 
@@ -121,25 +133,22 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
             np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
             
-            training_reconstructed_imgs = generate_reconstructions(resnet_vae, device, X_train, z_train)
-            print("Training igures generated succesfully.")
-            for ind, grid in enumerate(training_reconstructed_imgs):
-                imgs = wandb.Image(grid, caption='images together top: orig, bottom: recon')
-                wandb.log({'Training reconstructions': imgs})
+            grid = generate_reconstructions(resnet_vae, device, X_train, z_train)
+            print("Training figures generated succesfully.")
+            imgs = wandb.Image(grid, caption='images together top: orig, bottom: recon')
+            wandb.log({'Training reconstructions': imgs})
             print("Training reconstructions logged succesfully.")
 
-            validation_reconstructed_imgs = generate_reconstructions(resnet_vae, device, X_test, z_test)
+            grid = generate_reconstructions(resnet_vae, device, X_test, z_test)
             print("Validation figures generated succesfully.")
-            for ind, grid in enumerate(validation_reconstructed_imgs):
-                imgs = wandb.Image(grid, caption='images together top: orig, bottom: recon')
-                wandb.log({'Validation reconstructions': imgs})
+            imgs = wandb.Image(grid, caption='images together top: orig, bottom: recon')
+            wandb.log({'Validation reconstructions': imgs})
             print("Validation reconstructions logged succesfully.")
             
-            validation_generated_imgs = generate_from_noise(resnet_vae, device, 10)
+            grid = generate_from_noise(resnet_vae, device, 32) # make sure the number is multiples of 8
             print("Images generated from noise succesfully.")
-            for ind, grid in enumerate(validation_generated_imgs):
-                imgs = wandb.Image(grid)
-                wandb.log({'Validation generated images from noise': imgs})
+            imgs = wandb.Image(grid)
+            wandb.log({'Validation generated images from noise': imgs})
             print("Images from noise logged succesfully.")
 
         print(f"epoch time elapsed {time.time() - start} seconds")

@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from torchvision.utils import make_grid
+
 
 from spatial_statistics_loss import TwoPointSpatialStatsLoss
 from neural_style_transfer_loss import ContentLoss, StyleLoss
@@ -52,6 +54,49 @@ class ExponentialScheduler:
         return self.a * ( self.b ** epoch )
 
 
+def learning_rate_switcher(epochs, epoch, lrs):
+    
+    """
+    Switches between two learning rates throughout the training
+    
+    epochs: (int) The total number of epochs
+    epoch: (int) The current epoch
+    lrs: (tuple) learning rate values
+    """
+    idx = int(np.floor((epoch / epochs) * 10) % 2)
+    return lrs[idx]
+
+
+def get_learning_rate(optimizer):
+        for paramgroup in optimizer.param_groups:
+            return paramgroup['lr']
+
+
+class LossCoefficientScheduler:
+    def __init__(self, start_value, total_steps, mode='exponential'):
+        assert start_value <= 1 and start_value >= 0, "Start value should be between 0 and 1"
+        assert total_steps > 0, "Total steps should be positive integer"
+        assert mode in ['linear', 'exponential'], "Mode should be 'linear' or 'exponential'"
+        self.start_value = start_value
+        self.total_steps = total_steps
+        self.current_step = 0
+        self.value = start_value
+        self.mode = mode
+        
+    def step(self):
+        if self.current_step < self.total_steps:
+            if self.mode == 'linear':
+                increment = (1 - self.start_value) / self.total_steps
+                self.value += increment
+            elif self.mode == 'exponential':
+                # Using an exponential function that starts slow and becomes steep
+                self.value = self.start_value + (1 - self.start_value) * (self.current_step / self.total_steps)**2
+            self.current_step += 1
+            # Clip the value to ensure it does not exceed 1
+            self.value = min(self.value, 1.0)
+        return np.round(self.value, 3)
+
+
 def train(log_interval, model, criterion, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta):
     # set model as training mode
     model.train()
@@ -82,9 +127,10 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
-        # # DELETE
+        # COMMENT OUT ----
         # if batch_idx > 1:
         #     break
+        # ----------------
         
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
@@ -115,9 +161,10 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             all_mu.extend(mu.data.cpu().numpy())
             all_logvar.extend(logvar.data.cpu().numpy())
             
-            # #DELETE
+            # COMMENT OUT ----
             # if batch_idx > 1:
             #     break
+            # ----------------
             
     losses = losses.mean(axis=0)
 
@@ -145,24 +192,34 @@ def generate_reconstructions(model, device, X, z):
         xx = X[ind]
         generated_image_pytorch = decoder(model, device, zz)
         generated_image_torch = generated_image_pytorch[0]
-
         # Ensure both images are on the same scale
         xx = (xx - xx.min()) / (xx.max() - xx.min())
         generated_image_torch = (generated_image_torch - generated_image_torch.min()) / \
                                 (generated_image_torch.max() - generated_image_torch.min())
-        
         tgther = torch.cat([torch.tensor(xx), generated_image_torch], dim=1)
         imgs.append(tgther)
-    return imgs
+    # Convert list of tensors to a 4D tensor
+    imgs_tensor = torch.stack(imgs)
+    # Make a grid of images with 4 columns
+    grid = make_grid(imgs_tensor, nrow=8, padding=1)
+    return grid
 
 
 def generate_from_noise(model, device, num_imgs):
     generated_images = []
     for _ in range(num_imgs):
-        zz = torch.normal(0, 1, size=(1, 256))
-        img = decoder(model, device, zz)
-        generated_images.append(img[0])
-    return generated_images
+        zz = torch.normal(0, 1, size=(1, 256), device=device)
+        img = decoder(model, device, zz)[0]
+        # Normalize the image to [0, 1]
+        img = (img - img.min()) / (img.max() - img.min())
+        generated_images.append(img)
+    # Convert list of tensors to a 4D tensor
+    images_tensor = torch.stack(generated_images)
+    # Manually arrange tensors into a grid
+    nrow = 8  # Number of images per row
+    grid_rows = [images_tensor[i:i+nrow] for i in range(0, len(images_tensor), nrow)]
+    grid = torch.cat([torch.cat(row.unbind(), dim=-1) for row in grid_rows], dim=-2)
+    return grid
 
 
 def seed_everything(seed: int):    

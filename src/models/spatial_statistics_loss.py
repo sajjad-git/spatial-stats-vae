@@ -62,7 +62,7 @@ def calculate_2point_torch_spatialstat(mf, H, el):
 
     #timeT = round(time.time()-st, 5)
     #print("correlation computed: %s s" % timeT)
-    return ff_v2
+    return ff_v2.unsqueeze(0)
 
 
 def calculate_batch_2point_torch_spatialstat(mfs, H, el):
@@ -93,6 +93,33 @@ def two_point_autocorr_pytorch(imgs, H=2):
     return ffts
 
 
+# Weighted MSE Loss Function with Gaussian Weighting
+def weighted_mse_loss(input, target, radius):
+    """
+    Usage: loss = weighted_mse_loss(input_image, target_image, radius)
+    """
+    assert input.size() == target.size(), "Input images must have the same dimensions"
+    _, height, width = input.size()
+
+    # Create a coordinate grid of the same shape as the input image
+    y, x = torch.meshgrid(torch.arange(height), torch.arange(width))
+    centerx, centery = width // 2, height // 2
+
+    # Compute the distance from the center of the image
+    dist_from_center = torch.sqrt((x - centerx)**2 + (y - centery)**2).float()
+
+    # Compute mask with Gaussian weights
+    mask = torch.exp(-(dist_from_center**2) / (2 * radius**2)).to(input.device)
+
+    # Compute weighted MSE loss
+    diff = input - target
+    diff = diff ** 2
+    diff = diff * mask  # Apply weights
+    loss = diff.sum() / mask.sum()
+
+    return loss
+
+
 class TwoPointSpatialStatsLoss(nn.Module):
     def __init__(self):
         super(TwoPointSpatialStatsLoss, self).__init__()
@@ -102,4 +129,5 @@ class TwoPointSpatialStatsLoss(nn.Module):
         input_autocorr = two_point_autocorr_pytorch(input)
         target_autocorr = two_point_autocorr_pytorch(target)
         diff = self.mse_loss(input_autocorr, target_autocorr)
+        #diff = weighted_mse_loss(input_autocorr, target_autocorr, radius=100)
         return diff
