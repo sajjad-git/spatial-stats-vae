@@ -1,6 +1,8 @@
-DS_Store
-/data
+.DS_Store
+src/data
 wandb
 src/models/__pycache__/
 src/data/raw
-./models
+models/resnetVAE*
+data
+src/models/test*
