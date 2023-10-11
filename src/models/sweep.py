@@ -7,7 +7,10 @@ from wandb_train import run_training
 
 
 def main():
-    wandb.init(project='sweep-vae-loss-alphas-and-neural-layers')
+    wandb.init(
+        project='sweep-vae-loss-alphas-and-neural-layers',
+        settings=wandb.Settings(_service_wait=300)
+        )
     
     config = wandb.config
     beta_max = 0.15
