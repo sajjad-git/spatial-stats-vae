@@ -128,8 +128,8 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
         # COMMENT OUT ----
-        # if batch_idx > 1:
-        #     break
+        if batch_idx > 1:
+            break
         # ----------------
         
     losses = losses.mean(axis=0)
@@ -162,8 +162,8 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             all_logvar.extend(logvar.data.cpu().numpy())
             
             # COMMENT OUT ----
-            # if batch_idx > 1:
-            #     break
+            if batch_idx > 1:
+                break
             # ----------------
             
     losses = losses.mean(axis=0)
