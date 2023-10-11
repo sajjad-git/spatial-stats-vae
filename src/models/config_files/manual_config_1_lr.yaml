@@ -7,7 +7,7 @@ parameters:
   epochs:
     value: 60
   learning_rates:
-    values: [(0.005, 0.0005), (0.01, 0.0001)]
+    values: [[0.005, 0.0005], [0.01, 0.0001]]
   a_mse:
     value: 0.15
   a_content:
