@@ -126,7 +126,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             }
         wandb.log(metrics)
         
-        if (epoch+1)%save_interval==0:
+        #if (epoch+1)%save_interval==0:
+        if True:
             torch.save(resnet_vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
             torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
             np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
