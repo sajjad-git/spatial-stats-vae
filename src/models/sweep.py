@@ -16,7 +16,7 @@ def main():
     beta_max = 0.15
     #beta_max = 1 - (config.a_mse + config.a_content + config.a_style + config.a_spst) # beta is scheduled. it will go from 0.005 to beta_max
     run_training(config.epochs, config.a_mse, config.a_content, config.a_style, config.a_spst, beta_max, 
-                     config.content_layer, config.style_layer, learning_rates=config.learning_rates) 
+                     config.content_layer, config.style_layer, learning_rate=config.learning_rate) 
     
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
@@ -27,7 +27,7 @@ if __name__=="__main__":
     wandb.login()
 
     # 2: Load the YAML configuration file
-    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_1_lr.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_2_lr.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep

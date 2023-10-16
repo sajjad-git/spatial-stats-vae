@@ -17,13 +17,13 @@ from training_utils import train, validation, MaterialSimilarityLoss, Exponentia
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer,
-                learning_rates=(1e-3, 1e-3), batch_size=32, CNN_embed_dim=256,
+                learning_rate=1e-3, batch_size=32, CNN_embed_dim=256,
                   dropout_p=0.2, log_interval=2, save_interval=20, resume_training=False, last_epoch=0):
     seed=110
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_shapesData_" + f"lr{learning_rates}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "_sum_reduction"
+    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" + "_a_mse" + str(a_mse) + "_a_content" + str(a_content) + "_a_style" + str(a_style) + "_a_spst" + str(a_spst) + "_" + "content_layer" + f"{content_layer}" + "_" + "style_layer" + f"{style_layer}" + "_sum_reduction"
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
 
@@ -60,7 +60,6 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     resnet_vae.resnet.requires_grad_(False)
     wandb.watch(resnet_vae)
     model_params = list(resnet_vae.parameters())
-    learning_rate = learning_rate_switcher(epochs, 0, learning_rates)
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer)
@@ -90,11 +89,6 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         # TODO: Test the effect of the scheduler on our results
         #beta = beta_scheduler.get_beta(epoch)
         beta=1
-
-        # switch the optimizer learning rate
-        lr = learning_rate_switcher(epochs, epoch, learning_rates)
-        for g in optimizer.param_groups:
-            g['lr'] = lr
 
         # train, test model
         X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta)
@@ -145,11 +139,13 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             wandb.log({'Validation reconstructions': imgs})
             print("Validation reconstructions logged succesfully.")
             
-            grid = generate_from_noise(resnet_vae, device, 32) # make sure the number is multiples of 8
-            print("Images generated from noise succesfully.")
-            imgs = wandb.Image(grid)
-            wandb.log({'Validation generated images from noise': imgs})
-            print("Images from noise logged succesfully.")
+            try:
+                grid = generate_from_noise(resnet_vae, device, 32)
+                imgs = wandb.Image(grid)
+                wandb.log({'Validation generated images from noise': imgs})
+                print("Images generated from noise successfully.")
+            except Exception as e:
+                print(f"Error generating images from noise: {e}")
 
         print(f"epoch time elapsed {time.time() - start} seconds")
         print("-------------------------------------------------")

@@ -1,0 +1,27 @@
+program: sweep.py
+method: grid
+metric:
+  goal: minimize
+  name: overall_loss
+parameters:
+  epochs:
+    value: 60
+  learning_rate:
+    values: [0.00001, 0.00005, 0.0001, 0.0005]
+  a_mse:
+    value: 0.15
+  a_content:
+    value: 0.0
+  a_style:
+    value: 0.0
+  a_spst:
+    value: 0.85
+  content_layer:
+    value: 1
+  style_layer:
+    value: 1  
+early_terminate:
+  type: hyperband
+  s: 2
+  eta: 3
+  max_iter: 27
