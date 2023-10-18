@@ -27,7 +27,7 @@ if __name__=="__main__":
     wandb.login()
 
     # 2: Load the YAML configuration file
-    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_2_lr.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_lr_3.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep

@@ -140,7 +140,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             print("Validation reconstructions logged succesfully.")
             
             try:
-                grid = generate_from_noise(resnet_vae, device, 32)
+                grid = generate_from_noise(resnet_vae, device, 32).cpu()
                 imgs = wandb.Image(grid)
                 wandb.log({'Validation generated images from noise': imgs})
                 print("Images generated from noise successfully.")
