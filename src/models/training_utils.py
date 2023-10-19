@@ -55,10 +55,8 @@ class ExponentialScheduler:
 
 
 def learning_rate_switcher(epochs, epoch, lrs):
-    
     """
     Switches between two learning rates throughout the training
-    
     epochs: (int) The total number of epochs
     epoch: (int) The current epoch
     lrs: (tuple) learning rate values
@@ -66,11 +64,14 @@ def learning_rate_switcher(epochs, epoch, lrs):
     idx = int(np.floor((epoch / epochs) * 10) % 2)
     return lrs[idx]
 
-
 def get_learning_rate(optimizer):
-        for paramgroup in optimizer.param_groups:
-            return paramgroup['lr']
+    for paramgroup in optimizer.param_groups:
+        return paramgroup['lr']
 
+def change_learning_rate(optimizer, new_lr):
+    for paramgroup in optimizer.param_groups:
+        paramgroup['lr'] = new_lr
+        return optimizer
 
 class LossCoefficientScheduler:
     def __init__(self, start_value, total_steps, mode='exponential'):
@@ -89,7 +90,7 @@ class LossCoefficientScheduler:
                 increment = (1 - self.start_value) / self.total_steps
                 self.value += increment
             elif self.mode == 'exponential':
-                # Using an exponential function that starts slow and becomes steep
+                # Using an exponential function that starts slow and becomes steep towards the end
                 self.value = self.start_value + (1 - self.start_value) * (self.current_step / self.total_steps)**2
             self.current_step += 1
             # Clip the value to ensure it does not exceed 1
@@ -97,7 +98,7 @@ class LossCoefficientScheduler:
         return np.round(self.value, 3)
 
 
-def train(log_interval, model, criterion, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta):
+def train(log_interval, model, criterion, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, testing):
     # set model as training mode
     model.train()
 
@@ -127,10 +128,8 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, N_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), loss.item()))
         
-        # COMMENT OUT ----
-        # if batch_idx > 1:
-        #     break
-        # ----------------
+        if testing and batch_idx > 1:
+            break
         
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
@@ -141,7 +140,7 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses
 
 
-def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta):
+def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta, testing):
     # set model as testing mode
     model.eval()
     losses = np.zeros(shape=(len(test_loader), 6))
@@ -161,10 +160,8 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             all_mu.extend(mu.data.cpu().numpy())
             all_logvar.extend(logvar.data.cpu().numpy())
             
-            # COMMENT OUT ----
-            # if batch_idx > 1:
-            #     break
-            # ----------------
+            if testing and batch_idx > 1:
+                break
             
     losses = losses.mean(axis=0)
 
@@ -180,7 +177,8 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
 
 def decoder(model, device, z):
     model.eval()
-    z = Variable(torch.FloatTensor(z)).to(device)
+    
+    z = torch.from_numpy(z).to(device)
     new_images_torch = model.decode(z).data.cpu()
     return new_images_torch
 
@@ -208,7 +206,8 @@ def generate_reconstructions(model, device, X, z):
 def generate_from_noise(model, device, num_imgs):
     generated_images = []
     for _ in range(num_imgs):
-        zz = torch.normal(0, 1, size=(1, 256), device=device)
+        #zz = torch.normal(0, 1, size=(1, 256), device=device)
+        zz = np.random.normal(0, 1, size=(1, 256)).astype(np.float32)
         img = decoder(model, device, zz)[0]
         # Normalize the image to [0, 1]
         img = (img - img.min()) / (img.max() - img.min())

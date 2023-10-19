@@ -123,7 +123,8 @@ def weighted_mse_loss(input, target, radius):
 class TwoPointSpatialStatsLoss(nn.Module):
     def __init__(self):
         super(TwoPointSpatialStatsLoss, self).__init__()
-        self.mse_loss = nn.MSELoss(reduction='sum')
+        #self.mse_loss = nn.MSELoss(reduction='sum')
+        self.mse_loss = nn.MSELoss()
 
     def forward(self, input, target):
         input_autocorr = two_point_autocorr_pytorch(input)

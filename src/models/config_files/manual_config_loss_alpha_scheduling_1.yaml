@@ -4,12 +4,12 @@ metric:
   goal: minimize
   name: overall_loss
 parameters:
-  sanity_checking:
-    value: true
+  testing:
+    value: false
   epochs:
-    value: 2
+    value: 100
   batch_size:
-    value: 2
+    value: 32
   bottleneck_size:
     value: 256
   learning_rate:
