@@ -4,7 +4,7 @@ metric:
   goal: minimize
   name: overall_loss
 parameters:
-  testing:
+  sanity_checking:
     value: false
   epochs:
     value: 100
