@@ -27,7 +27,7 @@ class MaterialSimilarityLoss(nn.Module):
         self.device = device
         #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
-        self.spst_loss = TwoPointSpatialStatsLoss()
+        self.spst_loss = TwoPointSpatialStatsLoss(device=device, shift_tensors=True, filtered=True)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
