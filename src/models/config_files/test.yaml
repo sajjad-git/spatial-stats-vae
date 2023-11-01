@@ -4,10 +4,12 @@ metric:
   goal: minimize
   name: overall_loss
 parameters:
-  sanity_checking:
+  debugging:
     value: true
+  dataset_name:
+    value: "lines"
   epochs:
-    value: 2
+    value: 1
   batch_size:
     value: 2
   bottleneck_size:
@@ -31,9 +33,9 @@ parameters:
   style_layer:
     value: 1  
   schedule_KLD:
-    values: [false, true]
+    values: [true]
   schedule_spst:
-    values: [false, true]
+    values: [true]
 early_terminate:
   type: hyperband
   s: 2

@@ -1,13 +1,10 @@
-import os 
-
+import torchvision.transforms as transforms
+from torch.utils.data import Dataset, DataLoader
 import pandas as pd
-
+import os
 from PIL import Image
 
-from torch.utils.data import Dataset
-
-
-class ShapesDataset(Dataset):
+class LinesDataset(Dataset):
     def __init__(self, csv_file, img_dir, transform=None):
         self.labels = pd.read_csv(csv_file)
         self.img_dir = img_dir
@@ -23,8 +20,7 @@ class ShapesDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        # convert shape type to binary: 0 for Square, 1 for Circle
-        shape_type = 0 if self.labels.iloc[idx, 1] == "Square" else 1
+        # Convert line type to binary: 0 for Vertical, 1 for Horizontal
+        line_type = 0 if self.labels.iloc[idx, 1] == "Vertical" else 1
 
-        # returning image, shape type and number of shapes as a tuple
-        return image, shape_type
+        return image, line_type
