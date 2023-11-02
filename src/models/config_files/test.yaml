@@ -9,7 +9,7 @@ parameters:
   dataset_name:
     value: "lines"
   epochs:
-    value: 1
+    value: 3
   batch_size:
     value: 2
   bottleneck_size:

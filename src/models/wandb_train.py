@@ -117,12 +117,6 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
-        
-        # schedule the spst loss value
-        if schedule_spst:
-            a_spst = a_spst_scheduler.step()
-            a_mse = 1 - a_spst
-
         metrics = {
             "mse_training_loss": mse_training_loss, 
             "mse_validation_loss": mse_loss, 
@@ -140,8 +134,15 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             "mu_test": mu_test,
             "logvar_train": logvar_train,
             "logvar_test": logvar_test,
+            "alpha_mse": a_mse,
+            "alpha_spst": a_spst,
             }
         wandb.log(metrics)
+
+        # schedule the spst loss value
+        if schedule_spst:
+            a_spst = a_spst_scheduler.step()
+            a_mse = 1 - a_spst
         
         save_condition = True if debugging else (epoch + 1) % save_interval == 0
         if save_condition:
