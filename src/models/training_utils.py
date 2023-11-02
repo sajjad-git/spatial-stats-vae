@@ -73,25 +73,52 @@ def change_learning_rate(optimizer, new_lr):
         paramgroup['lr'] = new_lr
         return optimizer
 
+
 class LossCoefficientScheduler:
-    def __init__(self, start_value, total_steps, mode='exponential'):
+    def __init__(self, start_value, total_steps, mode='exponential', sigmoid_params={'scale': 4.8, 'shift': 0.2, 'duration': 0.4}):
+        """
+        Initialize the Loss Coefficient Scheduler.
+
+        Parameters:
+        - start_value (float): The initial value of the loss coefficient. Should be between 0 and 1.
+        - total_steps (int): Total number of steps in the schedule.
+        - mode (str): The mode of progression of the loss coefficient. Can be 'linear', 'exponential', or 'sigmoid'.
+        - sigmoid_params (dict): Parameters for sigmoid mode.
+            - 'scale' (float): Controls the steepness of the sigmoid curve. Larger values make the transition steeper.
+            - 'shift' (float): Fraction of total_steps after which the sigmoid transition starts. 
+            - 'duration' (float): Fraction of total_steps over which the sigmoid transition takes place. This is where you want the increase to happen.
+        use y=1/(1+e^{(-s*(x/t-h)/d)}) for desmos (t=100 for 100 epochs, scale: s=4.8, shift: h=0.2,which means rise to one at 20% of total epochs, duration: d=0.05) The only things to change are h and t.
+        """
         assert start_value <= 1 and start_value >= 0, "Start value should be between 0 and 1"
         assert total_steps > 0, "Total steps should be positive integer"
-        assert mode in ['linear', 'exponential'], "Mode should be 'linear' or 'exponential'"
+        assert mode in ['linear', 'exponential', 'sigmoid'], "Mode should be 'linear', 'exponential', or 'sigmoid'"
         self.start_value = start_value
         self.total_steps = total_steps
         self.current_step = 0
         self.value = start_value
         self.mode = mode
+        self.sigmoid_params = sigmoid_params
         
     def step(self):
+        """
+        Advance one step in the schedule and update the loss coefficient.
+
+        Returns:
+        - value (float): The updated loss coefficient, rounded to 3 decimal places.
+        """
         if self.current_step < self.total_steps:
             if self.mode == 'linear':
                 increment = (1 - self.start_value) / self.total_steps
                 self.value += increment
             elif self.mode == 'exponential':
-                # Using an exponential function that starts slow and becomes steep towards the end
                 self.value = self.start_value + (1 - self.start_value) * (self.current_step / self.total_steps)**2
+            elif self.mode == 'sigmoid':
+                # Sigmoid function that starts slow, then increases, and finally plateaus
+                scale = self.sigmoid_params['scale']
+                shift = self.sigmoid_params['shift']
+                duration = self.sigmoid_params['duration']
+                x = scale * (self.current_step / self.total_steps - shift) / duration
+                self.value = 1 / (1 + np.exp(-x))
             self.current_step += 1
             # Clip the value to ensure it does not exceed 1
             self.value = min(self.value, 1.0)

@@ -80,7 +80,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer)
-    a_spst_scheduler = LossCoefficientScheduler(a_spst, epochs)
+    a_spst_scheduler = LossCoefficientScheduler(a_spst, epochs, mode="sigmoid")
 
     print({
         "seed": seed,

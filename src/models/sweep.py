@@ -21,7 +21,6 @@ def main():
                   batch_size=config.batch_size, CNN_embed_dim=config.bottleneck_size,
                      schedule_KLD=config.schedule_KLD, schedule_spst=config.schedule_spst, dataset_name=config.dataset_name,
                      debugging=config.debugging) 
-    
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
     parser.add_argument('--sweep_id', type=str, required=False, default=None, help="W&B sweep ID")
@@ -31,7 +30,7 @@ if __name__=="__main__":
     wandb.login()
 
     # 2: Load the YAML configuration file
-    with open(os.path.join(os.getcwd(), "src/models/config_files/test.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/config_files/test_datasets_debugged_spst_with_filter.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep
