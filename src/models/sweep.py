@@ -30,7 +30,7 @@ if __name__=="__main__":
     wandb.login()
 
     # 2: Load the YAML configuration file
-    with open(os.path.join(os.getcwd(), "src/models/config_files/test_datasets_debugged_spst_with_filter.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/config_files/test.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
+from torchvision.utils import make_grid
 
 from resnet_vae import ResNet_VAE
 import sys
@@ -113,8 +114,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
 
         # train, test model
         start = time.time()
-        X_train, y_train, z_train, mu_train, logvar_train, training_losses = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
-        X_test, y_test, z_test, mu_test, logvar_test, validation_losses = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
+        X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
+        X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
         metrics = {
@@ -164,13 +165,26 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             wandb.log({'Validation reconstructions': imgs})
             print("Validation reconstructions logged succesfully.")
             
-            try:
-                grid = generate_from_noise(resnet_vae, device, 32)
-                imgs = wandb.Image(grid)
-                wandb.log({'Validation generated images from noise': imgs})
-                print("Images generated from noise successfully.")
-            except Exception as e:
-                print(f"Error generating images from noise: {e}")
+            grid = generate_from_noise(resnet_vae, device, 16)
+            imgs = wandb.Image(grid)
+            wandb.log({'Validation generated images from noise': imgs})
+            print("Images generated from noise successfully.")
+
+            training_input_autocorr = training_input_autocorr.unsqueeze(1)
+            training_recon_autocorr = training_recon_autocorr.unsqueeze(1)
+            training_loss_autocorr_grid = torch.cat([training_input_autocorr, training_recon_autocorr], axis=2)
+            training_loss_autocorr_grid = make_grid(training_loss_autocorr_grid, nrow=8, padding=1)
+            imgs = wandb.Image(training_loss_autocorr_grid)
+            wandb.log({'Training autocorr images from inside the spst loss function': imgs})
+            print("Training autocorr images from inside the spst loss function saved successfully.")
+
+            validation_input_autocorr = validation_input_autocorr.unsqueeze(1)
+            validation_recon_autocorr = validation_recon_autocorr.unsqueeze(1)
+            validation_loss_autocorr_grid = torch.cat([validation_input_autocorr, validation_recon_autocorr], axis=2)
+            validation_loss_autocorr_grid = make_grid(validation_loss_autocorr_grid, nrow=8, padding=1)
+            imgs = wandb.Image(validation_loss_autocorr_grid)
+            wandb.log({'Validation autocorr images from inside the spst loss function': imgs})
+            print("Validation autocorr images from inside the spst loss function saved successfully.")
 
         print(f"epoch time elapsed {time.time() - start} seconds")
         print("-------------------------------------------------")
