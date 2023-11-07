@@ -5,17 +5,17 @@ metric:
   name: overall_loss
 parameters:
   debugging:
-    value: true
+    value: false
   dataset_name:
-    values: ["shapes", "lines"]
+    values: ["lines", "shapes"]
   epochs:
-    value: 3
+    value: 100
   batch_size:
-    value: 2
+    value: 32
   bottleneck_size:
     value: 256
   learning_rate:
-    value: 0.0001
+    values: [0.001, 0.0001]
   fine_tune_lr:
     value: 0.00005
   a_mse:

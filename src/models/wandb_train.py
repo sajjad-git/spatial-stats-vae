@@ -12,7 +12,7 @@ from resnet_vae import ResNet_VAE
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, '../data')
-from make_circles_squares_dataset import ShapesDataset
+from shapes_dataset import ShapesDataset
 from lines_dataset import LinesDataset
 from utils import ThresholdTransform, check_mkdir
 from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, generate_reconstructions, write_gradient_stats
@@ -63,10 +63,10 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     #dataset = CustomDataset('labels.csv', 'images', transformations)
     if dataset_name=='lines':
         data_dir = 'lines'
-        dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/shape_images'), transform)
+        dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
     elif dataset_name=='shapes':
-        data_dir = 'raw'
-        dataset = ShapesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/shape_images'), transform)
+        data_dir = 'shapes'
+        dataset = ShapesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*0.7), int(len(dataset)) - int(len(dataset)*0.7)])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)

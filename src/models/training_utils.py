@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 from torchvision.utils import make_grid
 
 from spatial_statistics_loss import TwoPointSpatialStatsLoss, calculate_two_point_autocorr_pytorch

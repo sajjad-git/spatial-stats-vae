@@ -11,7 +11,7 @@ from resnet_vae import ResNet_VAE
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, '../data')
-from make_circles_squares_dataset import CustomDataset
+from shapes_dataset import CustomDataset
 from utils import ThresholdTransform, check_mkdir
 from training_utils import train, validation, MaterialSimilarityLoss
 
