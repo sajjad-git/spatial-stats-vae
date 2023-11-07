@@ -6,3 +6,4 @@ src/data/raw
 models/resnetVAE*
 data
 src/models/test*
+src/models/runs

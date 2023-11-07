@@ -33,7 +33,7 @@ class TwoPointSpatialStatsLoss(nn.Module):
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
             target_autocorr = self.mask_tensor(target_autocorr)
-
+        
         diff = self.mse_loss(input_autocorr, target_autocorr)
         return diff, input_autocorr, target_autocorr
         #return diff
