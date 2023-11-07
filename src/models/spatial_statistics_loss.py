@@ -24,12 +24,12 @@ class TwoPointSpatialStatsLoss(nn.Module):
         """Applies the Gaussian mask to the input tensor."""
         return t * self.mask
 
-
     def forward(self, input, target):
         """Computes the loss between input and target tensors using two-point autocorrelation."""
-        input_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(input)).unsqueeze(1)
-        target_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(target)).unsqueeze(1)
-
+        # input_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(input)).unsqueeze(1)
+        # target_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(target)).unsqueeze(1)
+        input_autocorr = calculate_two_point_autocorr_pytorch(input.squeeze(1), normalize_ffts=True).unsqueeze(1)
+        target_autocorr = calculate_two_point_autocorr_pytorch(target.squeeze(1), normalize_ffts=True).unsqueeze(1)
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
             target_autocorr = self.mask_tensor(target_autocorr)
@@ -71,7 +71,7 @@ def generate_torch_microstructure_function(micr, H, el):
     mf_list = [soft_equality(micr, h, epsilon=0.25).unsqueeze(0) for h in range(H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
     return torch.cat(mf_list, dim=0)
 
-def calculate_2point_torch_spatialstat(mf, H, el):
+def calculate_2point_torch_spatialstat(mf, H, el, normalize_output=False):
     """
     Calculates two-point spatial statistics for the microstructure function tensor.
 
@@ -95,9 +95,14 @@ def calculate_2point_torch_spatialstat(mf, H, el):
 
     FFtmp = term1 * term2 / S
 
-    return torch.fft.ifftn(FFtmp, [el, el], [0, 1]).real.unsqueeze(0)
+    output = torch.fft.ifftn(FFtmp, [el, el], [0, 1]).real.unsqueeze(0)
 
-def calculate_batch_2point_torch_spatialstat(mfs, H, el):
+    if normalize_output:
+        output = normalize(output)
+    
+    return output
+
+def calculate_batch_2point_torch_spatialstat(mfs, H, el, normalize_ffts):
     """
     Calculates two-point spatial statistics for a batch of microstructure function tensors.
 
@@ -105,14 +110,15 @@ def calculate_batch_2point_torch_spatialstat(mfs, H, el):
         mfs (torch.Tensor): Batch of microstructure function tensors. (Batch_size, W, H)
         H (int): Number of phases.
         el (int): Edge length of the microstructure.
+        normalize_output (bool): indicates that the output tensor should contain tensors that are normalized between [0, 1]
 
     Returns:
         torch.Tensor: Batch of two-point spatial statistics tensors.
     """
 
-    return torch.cat([calculate_2point_torch_spatialstat(mf, H, el) for mf in mfs], dim=0)
+    return torch.cat([calculate_2point_torch_spatialstat(mf, H, el, normalize_ffts) for mf in mfs], dim=0)
 
-def calculate_two_point_autocorr_pytorch(imgs, H=2):
+def calculate_two_point_autocorr_pytorch(imgs, normalize_ffts=False, H=2):
     """
     Computes the two-point autocorrelation for a batch of microstructure images.
 
@@ -125,26 +131,18 @@ def calculate_two_point_autocorr_pytorch(imgs, H=2):
     """
     el = imgs.shape[-1]
     microstructure_functions = torch.cat([generate_torch_microstructure_function(img, H, el).unsqueeze(dim=0) for img in imgs], dim=0)
-    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el))
+    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el, normalize_ffts))
 
 def fft_shift(input_autocorr):
         """Performs a circular shift on the input autocorrelation tensor."""
         _, H, W = input_autocorr.shape
         return torch.roll(input_autocorr, shifts=(H // 2, W // 2), dims=(-2, -1))
 
-def batch_normalize(images):
-        if len(images.shape) < 4:
-            images = images.unsqueeze(1)
-            
-        # Reshape the images tensor to merge width and height dimensions
-        reshaped_images = images.view(images.size(0), -1)
-        
-        # Compute the minimum and maximum values for each image
-        min_vals, _ = torch.min(reshaped_images, dim=1, keepdim=True)
-        max_vals, _ = torch.max(reshaped_images, dim=1, keepdim=True)
-        
-        # Normalize the images
-        normalized_images = (reshaped_images - min_vals) / (max_vals - min_vals + 1e-12)  # Adding a small value to avoid division by zero
-        
-        normalized_images = normalized_images.view(-1, images.shape[-2], images.shape[-1])
-        return normalized_images.squeeze(1)  # Remove the channels dimension added earlier
+def normalize(tensor, eps=1e-6):
+    """
+    Normalize tensor to be in the range [0, 1].
+
+    Tensor has to be of the shape [1, width, height] or [width, height]
+    """
+    tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
+    return tensor

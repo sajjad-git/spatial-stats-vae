@@ -280,3 +280,13 @@ def seed_everything(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+
+
+def write_gradient_stats(model):
+    total_grads = []
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.grad is not None:
+            grad_data = param.grad.cpu().view(-1).numpy()
+            total_grads.extend(grad_data)
+
+    return np.stack(total_grads, axis=0)

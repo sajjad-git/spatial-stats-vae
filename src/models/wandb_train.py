@@ -15,7 +15,7 @@ sys.path.insert(1, '../data')
 from make_circles_squares_dataset import ShapesDataset
 from lines_dataset import LinesDataset
 from utils import ThresholdTransform, check_mkdir
-from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, generate_reconstructions
+from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, generate_reconstructions, write_gradient_stats
 
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer, 
@@ -185,6 +185,11 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             imgs = wandb.Image(validation_loss_autocorr_grid, caption="From inside the loss function. top: validation input image autocorrelation, bottom: validation input reconstructed image autocorrelation")
             wandb.log({'Validation autocorr images from inside the spst loss function': imgs})
             print("Validation autocorr images from inside the spst loss function saved successfully.")
+
+        # save gradient stats
+        total_grads = write_gradient_stats(resnet_vae)
+        wandb.log({'Total gradients mean': total_grads.mean(), "Total gradients std": total_grads.std()})
+        print("Gradients saved successfully.")
 
         print(f"epoch time elapsed {time.time() - start} seconds")
         print("-------------------------------------------------")
