@@ -27,16 +27,20 @@ class TwoPointSpatialStatsLoss(nn.Module):
 
     def forward(self, input, target):
         """Computes the loss between input and target tensors using two-point autocorrelation."""
-        input_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(input))
-        target_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(target))
+        input_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(input)).unsqueeze(1)
+        target_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(target)).unsqueeze(1)
 
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
             target_autocorr = self.mask_tensor(target_autocorr)
-        
+
         diff = self.mse_loss(input_autocorr, target_autocorr)
-        return diff, input_autocorr, target_autocorr
+        
+        input_and_input_autocorr = torch.cat([input, input_autocorr], axis=3)
+        target_and_target_autocorr = torch.cat([target, target_autocorr], axis=3)
+        #return diff, input_autocorr, target_autocorr
         #return diff
+        return diff, input_and_input_autocorr, target_and_target_autocorr
 
 def soft_equality(x, value, epsilon=1e-2):
     """
