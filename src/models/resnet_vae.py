@@ -51,6 +51,8 @@ class ResNet_VAE(nn.Module):
         self.bn1 = nn.BatchNorm1d(self.fc_hidden1, momentum=0.01)
         self.fc2 = nn.Linear(self.fc_hidden1, self.fc_hidden2)
         self.bn2 = nn.BatchNorm1d(self.fc_hidden2, momentum=0.01)
+        self.contract_channels = nn.Conv2d(3, 1, kernel_size=1)
+
         # Latent vectors mu and sigma
         self.fc3_mu = nn.Linear(self.fc_hidden2, self.CNN_embed_dim)      # output = CNN embedding latent variables
         self.fc3_logvar = nn.Linear(self.fc_hidden2, self.CNN_embed_dim)  # output = CNN embedding latent variables
@@ -60,7 +62,10 @@ class ResNet_VAE(nn.Module):
         self.fc_bn4 = nn.BatchNorm1d(self.fc_hidden2)
         self.fc5 = nn.Linear(self.fc_hidden2, 64 * 4 * 4)
         self.fc_bn5 = nn.BatchNorm1d(64 * 4 * 4)
+        
+        # Activations
         self.relu = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
 
         # Decoder
         self.convTrans6 = nn.Sequential(
@@ -80,10 +85,8 @@ class ResNet_VAE(nn.Module):
             nn.ConvTranspose2d(in_channels=8, out_channels=3, kernel_size=self.k2, stride=self.s2,
                                padding=self.pd2),
             nn.BatchNorm2d(3, momentum=0.01),
-            nn.Sigmoid()    # y = (y1, y2, y3) \in [0 ,1]^3
         )
         self.expand_channels = nn.Conv2d(1, 3, kernel_size=1)
-        self.contract_channels = nn.Conv2d(3, 1, kernel_size=1)
 
     def encode(self, x):
         #print(x.shape)
@@ -97,7 +100,6 @@ class ResNet_VAE(nn.Module):
         x = self.relu(x)
         x = self.bn2(self.fc2(x))
         x = self.relu(x)
-        # x = F.dropout(x, p=self.drop_p, training=self.training)
         mu, logvar = self.fc3_mu(x), self.fc3_logvar(x)
         return mu, logvar
 
@@ -117,7 +119,7 @@ class ResNet_VAE(nn.Module):
         x = self.convTrans8(x)
         x = F.interpolate(x, size=(224, 224), mode='bilinear')
         x = self.contract_channels(x)
-        #print(x.shape)
+        x = self.sigmoid(x) # output element of [0, 1]
         return x
 
     def forward(self, x):

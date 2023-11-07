@@ -3,11 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TwoPointSpatialStatsLoss(nn.Module):
-    def __init__(self, device, shift_tensors=False, filtered=False, mask_rad=20, input_size=224):
+    def __init__(self, device, filtered=False, mask_rad=20, input_size=224):
         super(TwoPointSpatialStatsLoss, self).__init__()
         self.mse_loss = nn.MSELoss()
         self.filtered = filtered
-        self.shift_tensors = shift_tensors
         if filtered:
             self.mask = self.create_mask(mask_rad, input_size, device)
 
@@ -21,31 +20,27 @@ class TwoPointSpatialStatsLoss(nn.Module):
         mask = torch.exp(-(dist_from_center**2) / (2 * rad**2)).to(device)
         return mask
 
-    def fft_shift(self, input_autocorr):
-        """Performs a circular shift on the input autocorrelation tensor."""
-        _, H, W = input_autocorr.shape
-        return torch.roll(input_autocorr, shifts=(H // 2, W // 2), dims=(-2, -1))
-
     def mask_tensor(self, t):
         """Applies the Gaussian mask to the input tensor."""
         return t * self.mask
 
+
     def forward(self, input, target):
         """Computes the loss between input and target tensors using two-point autocorrelation."""
-        input_autocorr = two_point_autocorr_pytorch(input)
-        target_autocorr = two_point_autocorr_pytorch(target)
-
-        if self.shift_tensors:
-            input_autocorr = self.fft_shift(input_autocorr)
-            target_autocorr = self.fft_shift(target_autocorr)
+        input_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(input)).unsqueeze(1)
+        target_autocorr = batch_normalize(calculate_two_point_autocorr_pytorch(target)).unsqueeze(1)
 
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
             target_autocorr = self.mask_tensor(target_autocorr)
 
         diff = self.mse_loss(input_autocorr, target_autocorr)
+        
+        input_and_input_autocorr = torch.cat([input, input_autocorr], axis=3)
+        target_and_target_autocorr = torch.cat([target, target_autocorr], axis=3)
         #return diff, input_autocorr, target_autocorr
-        return diff
+        #return diff
+        return diff, input_and_input_autocorr, target_and_target_autocorr
 
 def soft_equality(x, value, epsilon=1e-2):
     """
@@ -73,7 +68,7 @@ def generate_torch_microstructure_function(micr, H, el):
     Returns:
         torch.Tensor: Microstructure function tensor.
     """
-    mf_list = [soft_equality(micr, h).unsqueeze(0) for h in range(H)]
+    mf_list = [soft_equality(micr, h, epsilon=0.25).unsqueeze(0) for h in range(H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
     return torch.cat(mf_list, dim=0)
 
 def calculate_2point_torch_spatialstat(mf, H, el):
@@ -117,7 +112,7 @@ def calculate_batch_2point_torch_spatialstat(mfs, H, el):
 
     return torch.cat([calculate_2point_torch_spatialstat(mf, H, el) for mf in mfs], dim=0)
 
-def two_point_autocorr_pytorch(imgs, H=2):
+def calculate_two_point_autocorr_pytorch(imgs, H=2):
     """
     Computes the two-point autocorrelation for a batch of microstructure images.
 
@@ -128,7 +123,28 @@ def two_point_autocorr_pytorch(imgs, H=2):
     Returns:
         torch.Tensor: Batch of two-point autocorrelation tensors.
     """
-    img1 = imgs[0]
     el = imgs.shape[-1]
     microstructure_functions = torch.cat([generate_torch_microstructure_function(img, H, el).unsqueeze(dim=0) for img in imgs], dim=0)
-    return calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el)
+    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el))
+
+def fft_shift(input_autocorr):
+        """Performs a circular shift on the input autocorrelation tensor."""
+        _, H, W = input_autocorr.shape
+        return torch.roll(input_autocorr, shifts=(H // 2, W // 2), dims=(-2, -1))
+
+def batch_normalize(images):
+        if len(images.shape) < 4:
+            images = images.unsqueeze(1)
+            
+        # Reshape the images tensor to merge width and height dimensions
+        reshaped_images = images.view(images.size(0), -1)
+        
+        # Compute the minimum and maximum values for each image
+        min_vals, _ = torch.min(reshaped_images, dim=1, keepdim=True)
+        max_vals, _ = torch.max(reshaped_images, dim=1, keepdim=True)
+        
+        # Normalize the images
+        normalized_images = (reshaped_images - min_vals) / (max_vals - min_vals + 1e-12)  # Adding a small value to avoid division by zero
+        
+        normalized_images = normalized_images.view(-1, images.shape[-2], images.shape[-1])
+        return normalized_images.squeeze(1)  # Remove the channels dimension added earlier

@@ -8,8 +8,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision.utils import make_grid
 
-
-from spatial_statistics_loss import TwoPointSpatialStatsLoss
+from spatial_statistics_loss import TwoPointSpatialStatsLoss, calculate_two_point_autocorr_pytorch
 from neural_style_transfer_loss import ContentLoss, StyleLoss
 from loss_coefficients import normal_dist_coefficients
 
@@ -27,22 +26,22 @@ class MaterialSimilarityLoss(nn.Module):
         self.device = device
         #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
-        self.spst_loss = TwoPointSpatialStatsLoss(device=device, shift_tensors=True, filtered=True)
+        self.spst_loss = TwoPointSpatialStatsLoss(device=device, filtered=False)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
-    def forward(self, recon_x, x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
-        MSE = F.mse_loss(recon_x, x, reduction='sum')
+    def forward(self, x, recon_x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
+        MSE = F.mse_loss(x, recon_x, reduction='sum')
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
         #-------DELETE LATER--------
         CONTENTLOSS=torch.Tensor([0]).to(self.device)
         STYLELOSS=torch.Tensor([0]).to(self.device)
         #---------------------------
-        SPST = self.spst_loss(recon_x, x)
+        SPST, input_autocorr, recon_autocorr = self.spst_loss(x, recon_x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS 
-        return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, overall_loss
+        return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, overall_loss, input_autocorr, recon_autocorr
 
 
 class ExponentialScheduler:
@@ -89,7 +88,7 @@ class LossCoefficientScheduler:
             - 'duration' (float): Fraction of total_steps over which the sigmoid transition takes place. This is where you want the increase to happen.
         use y=1/(1+e^{(-s*(x/t-h)/d)}) for desmos (t=100 for 100 epochs, scale: s=4.8, shift: h=0.2,which means rise to one at 20% of total epochs, duration: d=0.05) The only things to change are h and t.
         """
-        assert start_value <= 1 and start_value >= 0, "Start value should be between 0 and 1"
+        #assert start_value <= 1 and start_value >= 0, "Start value should be between 0 and 1"
         assert total_steps > 0, "Total steps should be positive integer"
         assert mode in ['linear', 'exponential', 'sigmoid'], "Mode should be 'linear', 'exponential', or 'sigmoid'"
         self.start_value = start_value
@@ -129,8 +128,8 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     # set model as training mode
     model.train()
 
-    losses = np.zeros(shape=(len(train_loader), 6))
-
+    #losses = np.zeros(shape=(len(train_loader), 6))
+    losses = []
     all_y, all_z, all_mu, all_logvar = [], [], [], []
     N_count = 0   # counting total trained sample in one epoch
     for batch_idx, (X, y) in enumerate(train_loader):
@@ -140,11 +139,12 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
 
         optimizer.zero_grad()
         X_reconst, z, mu, logvar = model(X)  # VAE
-        mse, content, style, spst, kld, loss = criterion(X_reconst, X, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-        losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
+        mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+        #losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
+        loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+        losses.append(loss_values)
         loss.backward()
         optimizer.step()
-
         all_y.extend(y.data.cpu().numpy())
         all_z.extend(z.data.cpu().numpy())
         all_mu.extend(mu.data.cpu().numpy())
@@ -157,21 +157,21 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         
         if testing and batch_idx > 1:
             break
-        
+    losses = np.array(losses)
     losses = losses.mean(axis=0)
     all_y = np.stack(all_y, axis=0)
     all_z = np.stack(all_z, axis=0)
     all_mu = np.stack(all_mu, axis=0)
     all_logvar = np.stack(all_logvar, axis=0)
 
-    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses
+    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses, input_autocorr, recon_autocorr
 
 
 def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta, testing):
     # set model as testing mode
     model.eval()
-    losses = np.zeros(shape=(len(test_loader), 6))
-
+    #losses = np.zeros(shape=(len(test_loader), 6))
+    losses = []
     all_y, all_z, all_mu, all_logvar = [], [], [], []
     with torch.no_grad():
         for batch_idx, (X, y) in enumerate(test_loader):
@@ -179,9 +179,10 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             X, y = X.to(device), y.to(device).view(-1, )
             X_reconst, z, mu, logvar = model(X)
 
-            mse, content, style, spst, kld, loss = criterion(X_reconst, X, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-            losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
-
+            mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+            #losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
+            loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+            losses.append(loss_values)
             all_y.extend(y.data.cpu().numpy())
             all_z.extend(z.data.cpu().numpy())
             all_mu.extend(mu.data.cpu().numpy())
@@ -189,7 +190,7 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             
             if testing and batch_idx > 1:
                 break
-            
+    losses = np.array(losses)        
     losses = losses.mean(axis=0)
 
     all_y = np.stack(all_y, axis=0)
@@ -199,7 +200,7 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
 
     # show information
     print('\nTest set ({:d} samples): Average loss: {:.4f}\n'.format(len(test_loader.dataset), losses[-1]))
-    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses
+    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses, input_autocorr, recon_autocorr
 
 
 def decoder(model, device, z):
@@ -210,19 +211,40 @@ def decoder(model, device, z):
     return new_images_torch
 
 
+def normalize(tensor, eps=1e-6):
+    """
+    Normalize tensor to be in the range [0, 1].
+
+    Tensor has to be of the shape [1, width, height] or [width, height]
+    """
+    tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
+    return tensor
+
 def generate_reconstructions(model, device, X, z):
     imgs = []
     for ind in range(len(X)):
         zz = z[ind].reshape((1, -1))
-        xx = X[ind]
-        generated_image_pytorch = decoder(model, device, zz)
-        generated_image_torch = generated_image_pytorch[0]
-        # Ensure both images are on the same scale
-        xx = (xx - xx.min()) / (xx.max() - xx.min())
-        generated_image_torch = (generated_image_torch - generated_image_torch.min()) / \
-                                (generated_image_torch.max() - generated_image_torch.min())
-        tgther = torch.cat([torch.tensor(xx), generated_image_torch], dim=1)
-        imgs.append(tgther)
+        xx = torch.tensor(X[ind])
+        xx_autocorr = calculate_two_point_autocorr_pytorch(xx)
+        recon = decoder(model, device, zz) 
+        recon = recon[0] # shape: [1, 224, 224]
+        recon_autocorr = calculate_two_point_autocorr_pytorch(recon)
+        
+        # Ensure all images are on the same scale       
+        xx = normalize(xx)
+        recon = normalize(recon)
+        xx_autocorr = normalize(xx_autocorr)
+        recon_autocorr = normalize(recon_autocorr)
+
+        # Concatenate autocorrs beside their respective tensors
+        xx_and_xx_autocorr = torch.cat((xx, xx_autocorr), dim=2)  # along width
+        recon_and_recon_autocorr = torch.cat((recon, recon_autocorr), dim=2)  # along width
+
+        # Now put the xx tensors on top of the recon tensors
+        square_layout = torch.cat((xx_and_xx_autocorr, recon_and_recon_autocorr), dim=1)  # along height
+
+        imgs.append(square_layout)
+
     # Convert list of tensors to a 4D tensor
     imgs_tensor = torch.stack(imgs)
     # Make a grid of images with 4 columns
@@ -233,12 +255,16 @@ def generate_reconstructions(model, device, X, z):
 def generate_from_noise(model, device, num_imgs):
     generated_images = []
     for _ in range(num_imgs):
-        #zz = torch.normal(0, 1, size=(1, 256), device=device)
         zz = np.random.normal(0, 1, size=(1, 256)).astype(np.float32)
         img = decoder(model, device, zz)[0]
-        # Normalize the image to [0, 1]
-        img = (img - img.min()) / (img.max() - img.min())
-        generated_images.append(img)
+        img_autocorr = calculate_two_point_autocorr_pytorch(img)
+        
+        img = normalize(img)
+        img_autocorr = normalize(img_autocorr)
+        
+        imgs_together = torch.cat((img, img_autocorr), axis=2)
+
+        generated_images.append(imgs_together)
     # Convert list of tensors to a 4D tensor
     images_tensor = torch.stack(generated_images)
     # Manually arrange tensors into a grid
