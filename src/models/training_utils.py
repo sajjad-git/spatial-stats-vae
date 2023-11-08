@@ -129,15 +129,36 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
 
     losses = []
     N_count = 0   # counting total trained sample in one epoch
+    mse_grads, spst_grads, kld_grads = [], [], []
+
     for batch_idx, (X, y) in enumerate(train_loader):
         # distribute data to device
         X, y = X.to(device), y.to(device).view(-1, )
         N_count += X.size(0)
 
-        optimizer.zero_grad()
         X_reconst, z, mu, logvar = model(X)  # VAE
         mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
         loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+
+        #if batch_idx % 100 == 0:
+        if batch_idx < 1:
+            # track the gradients
+            # mse gradients
+            optimizer.zero_grad()
+            mse.backward(retain_graph=True) # source: https://stackoverflow.com/questions/46774641/what-does-the-parameter-retain-graph-mean-in-the-variables-backward-method
+            mse_grads.extend(write_gradient_stats(model))
+
+            # spst grads
+            optimizer.zero_grad()
+            spst.backward(retain_graph=True)
+            spst_grads.extend(write_gradient_stats(model))
+
+            # Backward pass for KL divergence loss
+            optimizer.zero_grad()
+            kld.backward(retain_graph=True)  # No need to retain graph here, unless you have more loss components.
+            kld_grads.extend(write_gradient_stats(model))
+        
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
@@ -153,7 +174,11 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     losses = np.array(losses)
     losses = losses.mean(axis=0)
 
-    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr
+    mse_grads = np.stack(mse_grads, axis=0)
+    spst_grads = np.stack(spst_grads, axis=0)
+    kld_grads = np.stack(kld_grads, axis=0)
+
+    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr, mse_grads, spst_grads, kld_grads
 
 
 def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta, testing):
@@ -276,7 +301,7 @@ def write_gradient_stats(model):
     total_grads = []
     for name, param in model.named_parameters():
         if param.requires_grad and param.grad is not None:
-            grad_data = param.grad.cpu().view(-1).numpy()
+            grad_data = param.grad.cpu().clone().view(-1).numpy()
             total_grads.extend(grad_data)
 
     return np.stack(total_grads, axis=0)

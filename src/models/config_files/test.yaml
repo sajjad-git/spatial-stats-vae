@@ -7,25 +7,25 @@ parameters:
   debugging:
     value: true
   dataset_name:
-    values: ["shapes", "lines"]
+    values: ["lines"]
   epochs:
-    value: 3
+    value: 1000
   batch_size:
     value: 2
   bottleneck_size:
     value: 256
   learning_rate:
-    value: 0.0001
+    value: 0.001
   fine_tune_lr:
-    value: 0.00005
+    value: 0.0005
   a_mse:
-    value: 1
+    value: 0.0
   a_content:
     value: 0.0
   a_style:
     value: 0.0
   a_spst:
-    value: 0
+    value: 1.0
   beta_max:
     value: 1
   content_layer:
@@ -35,7 +35,7 @@ parameters:
   schedule_KLD:
     values: [true]
   schedule_spst:
-    values: [true]
+    values: [false]
 early_terminate:
   type: hyperband
   s: 2
