@@ -5,7 +5,7 @@ import torch.nn.functional as F
 class TwoPointSpatialStatsLoss(nn.Module):
     def __init__(self, device, filtered=False, mask_rad=20, input_size=224):
         super(TwoPointSpatialStatsLoss, self).__init__()
-        self.mse_loss = nn.MSELoss()
+        self.mse_loss = nn.MSELoss(reduction='sum')
         self.filtered = filtered
         if filtered:
             self.mask = self.create_mask(mask_rad, input_size, device)
