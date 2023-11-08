@@ -127,9 +127,7 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     # set model as training mode
     model.train()
 
-    #losses = np.zeros(shape=(len(train_loader), 6))
     losses = []
-    all_y, all_z, all_mu, all_logvar = [], [], [], []
     N_count = 0   # counting total trained sample in one epoch
     for batch_idx, (X, y) in enumerate(train_loader):
         # distribute data to device
@@ -139,16 +137,11 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         optimizer.zero_grad()
         X_reconst, z, mu, logvar = model(X)  # VAE
         mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-        #losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
         loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
-        losses.append(loss_values)
         loss.backward()
         optimizer.step()
-        all_y.extend(y.data.cpu().numpy())
-        all_z.extend(z.data.cpu().numpy())
-        all_mu.extend(mu.data.cpu().numpy())
-        all_logvar.extend(logvar.data.cpu().numpy())
 
+        losses.append(loss_values)
         # show information
         if (batch_idx + 1) % log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -156,22 +149,17 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         
         if testing and batch_idx > 1:
             break
+
     losses = np.array(losses)
     losses = losses.mean(axis=0)
-    all_y = np.stack(all_y, axis=0)
-    all_z = np.stack(all_z, axis=0)
-    all_mu = np.stack(all_mu, axis=0)
-    all_logvar = np.stack(all_logvar, axis=0)
 
-    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses, input_autocorr, recon_autocorr
+    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr
 
 
 def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta, testing):
     # set model as testing mode
     model.eval()
-    #losses = np.zeros(shape=(len(test_loader), 6))
     losses = []
-    all_y, all_z, all_mu, all_logvar = [], [], [], []
     with torch.no_grad():
         for batch_idx, (X, y) in enumerate(test_loader):
             # distribute data to device
@@ -179,30 +167,24 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             X_reconst, z, mu, logvar = model(X)
 
             mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-            #losses[batch_idx, :] = mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item()
             loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
             losses.append(loss_values)
-            all_y.extend(y.data.cpu().numpy())
-            all_z.extend(z.data.cpu().numpy())
-            all_mu.extend(mu.data.cpu().numpy())
-            all_logvar.extend(logvar.data.cpu().numpy())
             
             if testing and batch_idx > 1:
                 break
+
     losses = np.array(losses)        
     losses = losses.mean(axis=0)
 
-    all_y = np.stack(all_y, axis=0)
-    all_z = np.stack(all_z, axis=0)
-    all_mu = np.stack(all_mu, axis=0)
-    all_logvar = np.stack(all_logvar, axis=0)
-
     # show information
     print('\nTest set ({:d} samples): Average loss: {:.4f}\n'.format(len(test_loader.dataset), losses[-1]))
-    return X.data.cpu().numpy(), all_y, all_z, all_mu, all_logvar, losses, input_autocorr, recon_autocorr
+    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr
 
 
 def decoder(model, device, z):
+    """
+    To be used only during evaluation
+    """
     model.eval()
     
     z = torch.from_numpy(z).to(device)
@@ -220,6 +202,11 @@ def normalize(tensor, eps=1e-6):
     return tensor
 
 def generate_reconstructions(model, device, X, z):
+    """
+    Generate reconstrcutions for an X-z pair.
+    Note that since the decoder here will be run at eval mode, 
+    this function should only be used for evaluation.
+    """
     imgs = []
     for ind in range(len(X)):
         zz = z[ind].reshape((1, -1))
@@ -252,6 +239,10 @@ def generate_reconstructions(model, device, X, z):
 
 
 def generate_from_noise(model, device, num_imgs):
+    """
+    To be used to evaluate the model's decoding ability.
+    To only be used during evaluation.
+    """
     generated_images = []
     for _ in range(num_imgs):
         zz = np.random.normal(0, 1, size=(1, 256)).astype(np.float32)
