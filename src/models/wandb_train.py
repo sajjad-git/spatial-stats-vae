@@ -152,23 +152,12 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
             np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
             np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
             np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
-
-            grid = generate_reconstructions(resnet_vae, device, X_train, z_train)
-            print("Training figures generated succesfully.")
-            imgs = wandb.Image(grid, caption='images together top: (original image, original image autocorrelation), bottom: (reconstructed image, reconstructed image autocorrelation)')
-            wandb.log({'Training reconstructions': imgs})
-            print("Training reconstructions logged succesfully.")
-
-            grid = generate_reconstructions(resnet_vae, device, X_test, z_test)
-            print("Validation figures generated succesfully.")
-            imgs = wandb.Image(grid, caption='images together top: (original image, original image autocorrelation), bottom: (reconstructed image, reconstructed image autocorrelation)')
-            wandb.log({'Validation reconstructions': imgs})
-            print("Validation reconstructions logged succesfully.")
+            print("Data and model-optimizer params saved successfully.")
             
             grid = generate_from_noise(resnet_vae, device, 16)
-            imgs = wandb.Image(grid, caption="(Genearted image, Genearted image autocorrelation)")
+            imgs = wandb.Image(grid, caption="(Genearted image for validation, Genearted image autocorrelation)")
             wandb.log({'Validation generated images from noise': imgs})
-            print("Images generated from noise successfully.")
+            print("Validation images generated from noise successfully.")
 
             # training_input_autocorr = training_input_autocorr.unsqueeze(1)
             # training_recon_autocorr = training_recon_autocorr.unsqueeze(1)
