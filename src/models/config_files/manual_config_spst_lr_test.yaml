@@ -7,7 +7,7 @@ parameters:
   debugging:
     value: false
   dataset_name:
-    values: ["lines"]
+    values: ["shapes"]
   epochs:
     value: 100
   batch_size:
