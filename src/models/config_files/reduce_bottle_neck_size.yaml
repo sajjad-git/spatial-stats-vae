@@ -7,17 +7,15 @@ parameters:
   debugging:
     value: false
   dataset_name:
-    values: ["shapes"]
+    values: ["lines"]
   epochs:
     value: 100
   batch_size:
     value: 32
   bottleneck_size:
-    value: 256
+    values: [256, 124, 100, 64, 25, 9]
   learning_rate:
-    value: 0.001
-  fine_tune_lr:
-    value: 0.0005
+    values: [0.001]
   a_mse:
     value: 0.0
   a_content:
@@ -32,6 +30,12 @@ parameters:
     value: 1
   style_layer:
     value: 1  
+  spatial_stats_loss_reduction_type:
+    values: ["sum"]
+  normalize_spatial_stats_tensors:
+    values: [false]
+  soft_equality_eps:
+    values: [0.25]
   schedule_KLD:
     values: [true]
   schedule_spst:

@@ -3,13 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TwoPointSpatialStatsLoss(nn.Module):
-    def __init__(self, device, filtered=False, mask_rad=20, input_size=224):
+    def __init__(self, device, filtered=False, mask_rad=20, input_size=224, normalize_spatial_stats_tensors=False, reduction='mean', soft_equality_eps=0.25):
         super(TwoPointSpatialStatsLoss, self).__init__()
-        self.mse_loss = nn.MSELoss(reduction='sum')
+        self.mse_loss = nn.MSELoss(reduction=reduction)
         self.filtered = filtered
         if filtered:
             self.mask = self.create_mask(mask_rad, input_size, device)
-
+        self.normalize_spst_tensors = normalize_spatial_stats_tensors
+        self.soft_equality_eps = soft_equality_eps
     @staticmethod
     def create_mask(rad, input_size, device):
         """Creates a Gaussian mask of a given radius."""
@@ -26,8 +27,8 @@ class TwoPointSpatialStatsLoss(nn.Module):
 
     def forward(self, input, target):
         """Computes the loss between input and target tensors using two-point autocorrelation."""
-        input_autocorr = calculate_two_point_autocorr_pytorch(input.squeeze(1), normalize_ffts=True).unsqueeze(1)
-        target_autocorr = calculate_two_point_autocorr_pytorch(target.squeeze(1), normalize_ffts=True).unsqueeze(1)
+        input_autocorr = calculate_two_point_autocorr_pytorch(input.squeeze(1), normalize_spst_tensors=self.normalize_spst_tensors, soft_equality_eps=self.soft_equality_eps).unsqueeze(1)
+        target_autocorr = calculate_two_point_autocorr_pytorch(target.squeeze(1), normalize_spst_tensors=self.normalize_spst_tensors, soft_equality_eps=self.soft_equality_eps).unsqueeze(1)
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
             target_autocorr = self.mask_tensor(target_autocorr)
@@ -50,7 +51,7 @@ def soft_equality(x, value, epsilon=1e-2):
     """
     return torch.exp(-(x - value)**2 / (2 * epsilon**2))
 
-def generate_torch_microstructure_function(micr, H, el):
+def generate_torch_microstructure_function(micr, H, el, soft_equality_eps=0.25):
     """
     Generates a microstructure function tensor for a given microstructure image.
 
@@ -62,7 +63,7 @@ def generate_torch_microstructure_function(micr, H, el):
     Returns:
         torch.Tensor: Microstructure function tensor.
     """
-    mf_list = [soft_equality(micr, h, epsilon=0.25).unsqueeze(0) for h in range(H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
+    mf_list = [soft_equality(micr, h, epsilon=soft_equality_eps).unsqueeze(0) for h in range(H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
     return torch.cat(mf_list, dim=0)
 
 def calculate_2point_torch_spatialstat(mf, H, el, normalize_output=False):
@@ -96,7 +97,7 @@ def calculate_2point_torch_spatialstat(mf, H, el, normalize_output=False):
     
     return output
 
-def calculate_batch_2point_torch_spatialstat(mfs, H, el, normalize_ffts):
+def calculate_batch_2point_torch_spatialstat(mfs, H, el, normalize_spst_tensors):
     """
     Calculates two-point spatial statistics for a batch of microstructure function tensors.
 
@@ -110,9 +111,9 @@ def calculate_batch_2point_torch_spatialstat(mfs, H, el, normalize_ffts):
         torch.Tensor: Batch of two-point spatial statistics tensors.
     """
 
-    return torch.cat([calculate_2point_torch_spatialstat(mf, H, el, normalize_ffts) for mf in mfs], dim=0)
+    return torch.cat([calculate_2point_torch_spatialstat(mf, H, el, normalize_spst_tensors) for mf in mfs], dim=0)
 
-def calculate_two_point_autocorr_pytorch(imgs, normalize_ffts=False, H=2):
+def calculate_two_point_autocorr_pytorch(imgs, normalize_spst_tensors=False, H=2, soft_equality_eps=0.25):
     """
     Computes the two-point autocorrelation for a batch of microstructure images.
 
@@ -124,8 +125,8 @@ def calculate_two_point_autocorr_pytorch(imgs, normalize_ffts=False, H=2):
         torch.Tensor: Batch of two-point autocorrelation tensors.
     """
     el = imgs.shape[-1]
-    microstructure_functions = torch.cat([generate_torch_microstructure_function(img, H, el).unsqueeze(dim=0) for img in imgs], dim=0)
-    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el, normalize_ffts))
+    microstructure_functions = torch.cat([generate_torch_microstructure_function(img, H, el, soft_equality_eps=soft_equality_eps).unsqueeze(dim=0) for img in imgs], dim=0)
+    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el, normalize_spst_tensors))
 
 def fft_shift(input_autocorr):
         """Performs a circular shift on the input autocorrelation tensor."""

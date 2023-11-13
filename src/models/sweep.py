@@ -14,13 +14,15 @@ def main():
     
     config = wandb.config
     #beta_max = 1 - (config.a_mse + config.a_content + config.a_style + config.a_spst) # beta is scheduled. it will go from 0.005 to beta_max
-    run_training(config.epochs,
-                  config.a_mse, config.a_content, config.a_style, config.a_spst, config.beta_max, 
-                  config.content_layer, config.style_layer, 
-                  learning_rate=config.learning_rate, fine_tune_lr=config.fine_tune_lr,
-                  batch_size=config.batch_size, CNN_embed_dim=config.bottleneck_size,
-                     schedule_KLD=config.schedule_KLD, schedule_spst=config.schedule_spst, dataset_name=config.dataset_name,
-                     debugging=config.debugging) 
+    run_training(
+        config.epochs,
+        config.a_mse, config.a_content, config.a_style, config.a_spst, config.beta_max, 
+        config.content_layer, config.style_layer, 
+        learning_rate=config.learning_rate, fine_tune_lr=config.learning_rate/2,
+        spatial_stat_loss_reduction=config.spatial_stats_loss_reduction_type, normalize_spatial_stat_tensors=config.normalize_spatial_stats_tensors, soft_equality_eps=config.soft_equality_eps,
+        batch_size=config.batch_size, CNN_embed_dim=config.bottleneck_size,
+        schedule_KLD=config.schedule_KLD, schedule_spst=config.schedule_spst, dataset_name=config.dataset_name,
+        debugging=config.debugging) 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Use W&B sweeps to sweep over hyperparameters. Put h-params in the sweep_config.yaml file.")
     parser.add_argument('--sweep_id', type=str, required=False, default=None, help="W&B sweep ID")
@@ -31,7 +33,7 @@ if __name__=="__main__":
 
     # 2: Load the YAML configuration file
     #with open(os.path.join(os.getcwd(), "src/models/config_files/test.yaml"), "r") as yaml_file:
-    with open(os.path.join(os.getcwd(), "src/models/config_files/manual_config_spst_lr_test.yaml"), "r") as yaml_file:
+    with open(os.path.join(os.getcwd(), "src/models/config_files/tune_sum_reduction_spst_lr.yaml"), "r") as yaml_file:
         sweep_configuration = yaml.safe_load(yaml_file)
     
     # 3: Start the sweep

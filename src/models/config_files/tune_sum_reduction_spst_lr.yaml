@@ -5,19 +5,17 @@ metric:
   name: overall_loss
 parameters:
   debugging:
-    value: true
+    value: false
   dataset_name:
-    values: ["lines"]
+    values: ["lines", "shapes"]
   epochs:
     value: 100
   batch_size:
-    value: 2
+    value: 32
   bottleneck_size:
     value: 256
   learning_rate:
-    value: 0.001
-  fine_tune_lr:
-    value: 0.0005
+    values: [0.001, 0.01, 0.1, 1, 5]
   a_mse:
     value: 0.0
   a_content:
@@ -33,9 +31,9 @@ parameters:
   style_layer:
     value: 1  
   spatial_stats_loss_reduction_type:
-    values: ["sum", "mean"]
+    values: ["sum"]
   normalize_spatial_stats_tensors:
-    values: [false, true]
+    values: [false]
   soft_equality_eps:
     values: [0.25]
   schedule_KLD:

@@ -18,11 +18,15 @@ from utils import ThresholdTransform, check_mkdir
 from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, generate_reconstructions, write_gradient_stats
 
 
-def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer, style_layer, 
-                 learning_rate=1e-3, fine_tune_lr=0.0005, batch_size=32, CNN_embed_dim=256,
-                 dropout_p=0.2, log_interval=2, save_interval=20, resume_training=False, last_epoch=0, 
-                 schedule_KLD=False, schedule_spst=False, dataset_name='shapes',
-                 debugging=False):
+def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, 
+                content_layer, style_layer, 
+                learning_rate=1e-3, fine_tune_lr=0.0005, 
+                spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25,
+                batch_size=32, CNN_embed_dim=256, dropout_p=0.2, 
+                log_interval=2, save_interval=20, resume_training=False, last_epoch=0, 
+                schedule_KLD=False, schedule_spst=False, 
+                dataset_name='shapes',
+                debugging=False):
     
     seed=110
     seed_everything(seed)
@@ -80,7 +84,10 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, content_layer,
     model_params = list(resnet_vae.parameters())
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
-    loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer)
+    loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer, 
+                                           spatial_stat_loss_reduction=spatial_stat_loss_reduction,
+                                           normalize_spatial_stat_tensors=normalize_spatial_stat_tensors, 
+                                           soft_equality_eps=soft_equality_eps)
     a_spst_scheduler = LossCoefficientScheduler(a_spst, epochs, mode="sigmoid")
 
     print({

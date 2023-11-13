@@ -14,7 +14,7 @@ from loss_coefficients import normal_dist_coefficients
 
 class MaterialSimilarityLoss(nn.Module):
 
-    def __init__(self, device, content_layer=4, style_layer=4):
+    def __init__(self, device, content_layer=4, style_layer=4, spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25):
         """
         content_layer (int) is the layer that will be focused on the most;
         Same with the style layer.
@@ -25,7 +25,7 @@ class MaterialSimilarityLoss(nn.Module):
         self.device = device
         #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
-        self.spst_loss = TwoPointSpatialStatsLoss(device=device, filtered=False)
+        self.spst_loss = TwoPointSpatialStatsLoss(device=device, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
