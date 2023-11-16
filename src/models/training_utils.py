@@ -7,14 +7,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.utils import make_grid
 
-from spatial_statistics_loss import TwoPointSpatialStatsLoss, calculate_two_point_autocorr_pytorch
+from spatial_statistics_loss import TwoPointSpatialStatsLoss, TwoPointAutocorrelation
 from neural_style_transfer_loss import ContentLoss, StyleLoss
 from loss_coefficients import normal_dist_coefficients
 
 
 class MaterialSimilarityLoss(nn.Module):
 
-    def __init__(self, device, content_layer=4, style_layer=4, spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25):
+    def __init__(self, device, min_fft_pxl_val, max_fft_pxl_val, content_layer=4, style_layer=4, spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25):
         """
         content_layer (int) is the layer that will be focused on the most;
         Same with the style layer.
@@ -25,7 +25,7 @@ class MaterialSimilarityLoss(nn.Module):
         self.device = device
         #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
-        self.spst_loss = TwoPointSpatialStatsLoss(device=device, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
+        self.spst_loss = TwoPointSpatialStatsLoss(device, min_fft_pxl_val, max_fft_pxl_val, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
 
@@ -226,57 +226,20 @@ def normalize(tensor, eps=1e-6):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
     return tensor
 
-def generate_reconstructions(model, device, X, z):
-    """
-    Generate reconstrcutions for an X-z pair.
-    Note that since the decoder here will be run at eval mode, 
-    this function should only be used for evaluation.
-    """
-    imgs = []
-    for ind in range(len(X)):
-        zz = z[ind].reshape((1, -1))
-        xx = torch.tensor(X[ind])
-        xx_autocorr = calculate_two_point_autocorr_pytorch(xx)
-        recon = decoder(model, device, zz) 
-        recon = recon[0] # shape: [1, 224, 224]
-        recon_autocorr = calculate_two_point_autocorr_pytorch(recon)
-        
-        # Ensure all images are on the same scale       
-        xx = normalize(xx)
-        recon = normalize(recon)
-        xx_autocorr = normalize(xx_autocorr)
-        recon_autocorr = normalize(recon_autocorr)
 
-        # Concatenate autocorrs beside their respective tensors
-        xx_and_xx_autocorr = torch.cat((xx, xx_autocorr), dim=2)  # along width
-        recon_and_recon_autocorr = torch.cat((recon, recon_autocorr), dim=2)  # along width
-
-        # Now put the xx tensors on top of the recon tensors
-        square_layout = torch.cat((xx_and_xx_autocorr, recon_and_recon_autocorr), dim=1)  # along height
-
-        imgs.append(square_layout)
-
-    # Convert list of tensors to a 4D tensor
-    imgs_tensor = torch.stack(imgs)
-    # Make a grid of images with 4 columns
-    grid = make_grid(imgs_tensor, nrow=8, padding=1)
-    return grid
-
-
-def generate_from_noise(model, device, num_imgs):
+def generate_from_noise(model, device, num_imgs, two_pt_autocorr_func):
     """
     To be used to evaluate the model's decoding ability.
     To only be used during evaluation.
     """
     generated_images = []
     for _ in range(num_imgs):
-        zz = np.random.normal(0, 1, size=(1, 256)).astype(np.float32)
-        img = decoder(model, device, zz)[0]
-        img_autocorr = calculate_two_point_autocorr_pytorch(img)
-        
+        zz = np.random.normal(0, 1, size=(1, model.CNN_embed_dim)).astype(np.float32)
+        img = decoder(model, device, zz)
+        img_autocorr = two_pt_autocorr_func(img)
+        img, img_autocorr = img.squeeze(1), img_autocorr.squeeze(1)
         img = normalize(img)
-        img_autocorr = normalize(img_autocorr)
-        
+        #img_autocorr = normalize(img_autocorr)
         imgs_together = torch.cat((img, img_autocorr), axis=2)
 
         generated_images.append(imgs_together)
@@ -305,3 +268,10 @@ def write_gradient_stats(model):
             total_grads.extend(grad_data)
 
     return np.stack(total_grads, axis=0)
+
+def read_pixel_values(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        min_pixel_value = float(lines[1].strip().split(': ')[1])
+        max_pixel_value = float(lines[0].strip().split(': ')[1])
+    return min_pixel_value, max_pixel_value

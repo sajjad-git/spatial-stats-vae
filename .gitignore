@@ -4,6 +4,8 @@ wandb
 src/models/__pycache__/
 src/data/raw
 models/resnetVAE*
-data
+data/*/images
+data/*/2pt_autocorr_images
+data/*/labels.csv
 src/models/test*
 src/models/runs

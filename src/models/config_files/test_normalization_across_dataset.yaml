@@ -7,13 +7,13 @@ parameters:
   debugging:
     value: false
   dataset_name:
-    values: ["lines"]
+    values: ["lines", "shapes"]
   epochs:
-    value: 100
+    value: 200
   batch_size:
     value: 32
   bottleneck_size:
-    values: [256, 124, 100, 64, 25, 9]
+    value: 256
   learning_rate:
     values: [0.001]
   a_mse:

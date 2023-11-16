@@ -1,16 +1,128 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 class TwoPointSpatialStatsLoss(nn.Module):
-    def __init__(self, device, filtered=False, mask_rad=20, input_size=224, normalize_spatial_stats_tensors=False, reduction='mean', soft_equality_eps=0.25):
+    def __init__(self, device, min_pixel_value, max_pixel_value, H=2, filtered=False, mask_rad=20, input_size=224, normalize_spatial_stats_tensors=False, reduction='mean', soft_equality_eps=0.25):
         super(TwoPointSpatialStatsLoss, self).__init__()
+        self.H = H
         self.mse_loss = nn.MSELoss(reduction=reduction)
         self.filtered = filtered
         if filtered:
             self.mask = self.create_mask(mask_rad, input_size, device)
         self.normalize_spst_tensors = normalize_spatial_stats_tensors
         self.soft_equality_eps = soft_equality_eps
+        self.min_fft_pixel_value = min_pixel_value
+        self.max_fft_pixel_value = max_pixel_value
+
+    def forward(self, input, target):
+        """
+        Computes the loss between input and target tensors using two-point autocorrelation.
+
+        input, target: Torch tensors of shape (bs, 1, H, W)
+
+        Returns:
+        nn.Loss, torch tensor (bs, 1, H, W*2)
+        """
+        input_autocorr = self.calculate_two_point_autocorr_pytorch(input)
+        target_autocorr = self.calculate_two_point_autocorr_pytorch(target)
+
+        if self.filtered:
+            input_autocorr = self.mask_tensor(input_autocorr)
+            target_autocorr = self.mask_tensor(target_autocorr)
+        diff = self.mse_loss(input_autocorr, target_autocorr)
+        input_and_input_autocorr = torch.cat([input, input_autocorr], axis=3)
+        target_and_target_autocorr = torch.cat([target, target_autocorr], axis=3)
+        return diff, input_and_input_autocorr, target_and_target_autocorr
+
+    def calculate_two_point_autocorr_pytorch(self, imgs):
+        """
+        Computes the two-point autocorrelation for a batch of microstructure images.
+
+        Parameters:
+            imgs (torch.Tensor): Batch of microstructure images of shape: (batch_size, 1, H, W)
+            H (int): Number of phases.
+
+        Returns:
+            torch.Tensor: Batch of two-point autocorrelation tensors.
+        """
+        microstructure_functions = torch.cat([self.generate_torch_microstructure_function(img).unsqueeze(dim=0) for img in imgs], dim=0) 
+        ffts = torch.cat([self.calculate_2point_torch_spatialstat(mf).unsqueeze(dim=0) for mf in microstructure_functions], dim=0) 
+        shifted_ffts = self.fft_shift(ffts) 
+        return shifted_ffts
+
+    def generate_torch_microstructure_function(self, micr):
+        """
+        Generates a microstructure function tensor for a given microstructure image.
+
+        Parameters:
+            micr (torch.Tensor): Input microstructure image tensor of shape (1, H, W).
+            H (int): Number of phases.
+            el (int): Edge length of the microstructure.
+
+        Returns:
+            torch.Tensor: Microstructure function Torch tensor of shape (2, H, W)
+        """
+        mf_list = [self.soft_equality(micr, h) for h in range(self.H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
+        return torch.cat(mf_list, dim=0)
+
+    def soft_equality(self, x, value):
+        """
+        Computes a differentiable approximation of the equality operation.
+
+        Parameters:
+            x (torch.Tensor): Input tensor.
+            value (float): Value to compare with.
+            epsilon (float): Smoothing parameter.
+
+        Returns:
+            torch.Tensor: Tensor of the same shape as x with values close to 1 where x is close to value, and close to 0 elsewhere.
+        """
+        return torch.exp(-(x - value)**2 / (2 * self.soft_equality_eps**2))
+
+    def calculate_2point_torch_spatialstat(self, mf):
+        """
+        Calculates two-point spatial statistics for the microstructure function tensor.
+
+        Parameters:
+            mf (torch.Tensor): Microstructure function tensor of shape (num_phases, edge_len, edge_len).
+
+        Returns:
+            torch.Tensor: Two-point spatial statistics tensor of shape (1, edge_len, edge_len)
+        """
+        el = mf.shape[-1]
+        iA, iB = 0, 0
+        M = torch.zeros((self.H, el, el), dtype=torch.complex128, device=mf.device)
+        for h in range(self.H):
+            M[h, ...] = torch.fft.fftn(mf[h, ...], dim=[0, 1])
+
+        S = el**2
+        M1, M2 = M[iA, ...], M[iB, ...]
+        term1 = torch.abs(M1) * torch.exp(-1j * torch.angle(M1))
+        term2 = torch.abs(M2) * torch.exp(1j * torch.angle(M2))
+
+        FFtmp = term1 * term2 / S
+
+        output = torch.fft.ifftn(FFtmp, [el, el], [0, 1]).real.unsqueeze(0)
+
+        if self.normalize_spst_tensors:
+            output = self.normalize(output)
+        
+        return output
+    
+    def fft_shift(self, input_autocorr):
+            """Performs a circular shift on the input autocorrelation tensor."""
+            _, _, H, W = input_autocorr.shape
+            return torch.roll(input_autocorr, shifts=(H // 2, W // 2), dims=(-2, -1))
+
+    def normalize(self, tensor, eps=1e-6):
+        """
+        Normalize tensor to be in the range [0, 1].
+
+        Tensor has to be of the shape [1, H, W] or [H, W]
+        """
+        tensor = (tensor - self.min_fft_pixel_value) / (self.max_fft_pixel_value - self.min_fft_pixel_value + eps)
+        return tensor
+
     @staticmethod
     def create_mask(rad, input_size, device):
         """Creates a Gaussian mask of a given radius."""
@@ -25,119 +137,81 @@ class TwoPointSpatialStatsLoss(nn.Module):
         """Applies the Gaussian mask to the input tensor."""
         return t * self.mask
 
-    def forward(self, input, target):
-        """Computes the loss between input and target tensors using two-point autocorrelation."""
-        input_autocorr = calculate_two_point_autocorr_pytorch(input.squeeze(1), normalize_spst_tensors=self.normalize_spst_tensors, soft_equality_eps=self.soft_equality_eps).unsqueeze(1)
-        target_autocorr = calculate_two_point_autocorr_pytorch(target.squeeze(1), normalize_spst_tensors=self.normalize_spst_tensors, soft_equality_eps=self.soft_equality_eps).unsqueeze(1)
-        if self.filtered:
-            input_autocorr = self.mask_tensor(input_autocorr)
-            target_autocorr = self.mask_tensor(target_autocorr)
-        diff = self.mse_loss(input_autocorr, target_autocorr)
-        input_and_input_autocorr = torch.cat([input, input_autocorr], axis=3)
-        target_and_target_autocorr = torch.cat([target, target_autocorr], axis=3)
-        return diff, input_and_input_autocorr, target_and_target_autocorr
 
-def soft_equality(x, value, epsilon=1e-2):
+class TwoPointAutocorrelation:
     """
-    Computes a differentiable approximation of the equality operation.
-
-    Parameters:
-        x (torch.Tensor): Input tensor.
-        value (float): Value to compare with.
-        epsilon (float): Smoothing parameter.
-
-    Returns:
-        torch.Tensor: Tensor of the same shape as x with values close to 1 where x is close to value, and close to 0 elsewhere.
-    """
-    return torch.exp(-(x - value)**2 / (2 * epsilon**2))
-
-def generate_torch_microstructure_function(micr, H, el, soft_equality_eps=0.25):
-    """
-    Generates a microstructure function tensor for a given microstructure image.
-
-    Parameters:
-        micr (torch.Tensor): Input microstructure image tensor of shape (batch_size, width, height).
-        H (int): Number of phases.
-        el (int): Edge length of the microstructure.
-
-    Returns:
-        torch.Tensor: Microstructure function tensor.
-    """
-    mf_list = [soft_equality(micr, h, epsilon=soft_equality_eps).unsqueeze(0) for h in range(H)] # 0.25 gives a nice smooth curve which will prob. help prevent loss of info.
-    return torch.cat(mf_list, dim=0)
-
-def calculate_2point_torch_spatialstat(mf, H, el, normalize_output=False):
-    """
-    Calculates two-point spatial statistics for the microstructure function tensor.
-
-    Parameters:
-        mf (torch.Tensor): Microstructure function tensor.
-        H (int): Number of phases.
-        el (int): Edge length of the microstructure.
-
-    Returns:
-        torch.Tensor: Two-point spatial statistics tensor.
-    """
-    iA, iB = 0, 0
-    M = torch.zeros((H, el, el), dtype=torch.complex128, device=mf.device)
-    for h in range(H):
-        M[h, ...] = torch.fft.fftn(mf[h, ...], dim=[0, 1])
-
-    S = el**2
-    M1, M2 = M[iA, ...], M[iB, ...]
-    term1 = torch.abs(M1) * torch.exp(-1j * torch.angle(M1))
-    term2 = torch.abs(M2) * torch.exp(1j * torch.angle(M2))
-
-    FFtmp = term1 * term2 / S
-
-    output = torch.fft.ifftn(FFtmp, [el, el], [0, 1]).real.unsqueeze(0)
-
-    if normalize_output:
-        output = normalize(output)
+    Warning: 
     
-    return output
+    - Not to be used for optimization purposes. This class cannot be used for optimizing NNs because backprop won't work here.
+    - The reason why backprop won't work here is because of the absense of soft inequality,
+    however, it can be used to calulate the exact spatial statistics of microstructure images. 
 
-def calculate_batch_2point_torch_spatialstat(mfs, H, el, normalize_spst_tensors):
-    """
-    Calculates two-point spatial statistics for a batch of microstructure function tensors.
-
-    Parameters:
-        mfs (torch.Tensor): Batch of microstructure function tensors. (Batch_size, W, H)
-        H (int): Number of phases.
-        el (int): Edge length of the microstructure.
-        normalize_output (bool): indicates that the output tensor should contain tensors that are normalized between [0, 1]
-
-    Returns:
-        torch.Tensor: Batch of two-point spatial statistics tensors.
+    - To be used to calculate autocorrelation for single binary image inputs.
     """
 
-    return torch.cat([calculate_2point_torch_spatialstat(mf, H, el, normalize_spst_tensors) for mf in mfs], dim=0)
+    def __init__(self, H=2):
+        # H: Number of phases (int)
+        self.H = H
+    
+    def calculate_microstructure_function(self, img):
+        """
+        Inputs:
+        img: image (Torch tensor of shape (1, H, W))
 
-def calculate_two_point_autocorr_pytorch(imgs, normalize_spst_tensors=False, H=2, soft_equality_eps=0.25):
-    """
-    Computes the two-point autocorrelation for a batch of microstructure images.
+        Returns: Microstructure function of image (Torch tensor of shape (self.H, H, W))
+        """
+        el = img.shape[-1]
+        mf = torch.zeros((self.H, el, el))
+        for h in range(self.H):
+            mf[h, ...] = img.eq(h).clone()
+        return mf
+    
+    def calculate_2point_torch_spatialstat(self, mf):
+        """
+        Calculates two-point spatial statistics for the microstructure function tensor.
 
-    Parameters:
-        imgs (torch.Tensor): Batch of microstructure images of shape: (Batch_size, W, H)
-        H (int): Number of phases.
+        Parameters:
+            mf (torch.Tensor): Microstructure function tensor of shape (num_phases, edge_len, edge_len).
 
-    Returns:
-        torch.Tensor: Batch of two-point autocorrelation tensors.
-    """
-    el = imgs.shape[-1]
-    microstructure_functions = torch.cat([generate_torch_microstructure_function(img, H, el, soft_equality_eps=soft_equality_eps).unsqueeze(dim=0) for img in imgs], dim=0)
-    return fft_shift(calculate_batch_2point_torch_spatialstat(microstructure_functions, H, el, normalize_spst_tensors))
+        Returns:
+            torch.Tensor: Two-point spatial statistics tensor of shape (1, edge_len, edge_len)
+        """
+        iA, iB = 0, 0
+        el = mf.shape[-1]
+        M = torch.zeros((self.H, el, el), dtype=torch.complex128)
+        for h in range(self.H):
+            M[h, ...] = torch.fft.fftn(mf[h, ...], dim=[0, 1])
 
-def fft_shift(input_autocorr):
-        """Performs a circular shift on the input autocorrelation tensor."""
+        S = el**2
+        M1, M2 = M[iA, ...], M[iB, ...]
+        term1 = torch.abs(M1) * torch.exp(-1j * torch.angle(M1))
+        term2 = torch.abs(M2) * torch.exp(1j * torch.angle(M2))
+
+        FFtmp = term1 * term2 / S
+
+        output = torch.fft.ifftn(FFtmp, [el, el], [0, 1]).real.unsqueeze(0)        
+        return output
+
+    def fft_shift(self, input_autocorr):
+        """
+        Performs a circular shift on the input autocorrelation tensor.
+        img: autocorrelation (Torch tensor of shape (1, H, W))
+
+        Returns: shifted autocorrelation (Torch tensor of shape (1, H, W))
+        """
         _, H, W = input_autocorr.shape
         return torch.roll(input_autocorr, shifts=(H // 2, W // 2), dims=(-2, -1))
 
-def normalize(tensor, eps=1e-6):
-    """
-    Normalize tensor to be in the range [0, 1].
+    def forward(self, img):
+        """
+        calculates the two-point autocorrelation
+        img: Torch tensor of shape (1, H, W)
 
-    Tensor has to be of the shape [1, width, height] or [width, height]
-    """
-    tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
-    return tensor
+        out: Torch tensor of shape (1, H, W)
+        """
+        assert (len(img.shape) == 3 and img.shape[0]==1 and img.shape[1]==img.shape[2]), "Input not a single-channel, square, individual image!"
+        mf = self.calculate_microstructure_function(img)
+        autocorr = self.calculate_2point_torch_spatialstat(mf)
+        shifted_autocorr = self.fft_shift(autocorr)
+        return shifted_autocorr
+    

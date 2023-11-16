@@ -1,0 +1,2 @@
+Max pixel value: 0.040178571647572284
+Min pixel value: -1.8770121917528395e-09

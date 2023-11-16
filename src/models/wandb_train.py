@@ -15,8 +15,7 @@ sys.path.insert(1, '../data')
 from shapes_dataset import ShapesDataset
 from lines_dataset import LinesDataset
 from utils import ThresholdTransform, check_mkdir
-from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, generate_reconstructions, write_gradient_stats
-
+from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, write_gradient_stats, read_pixel_values
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, 
                 content_layer, style_layer, 
@@ -56,9 +55,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     res_size = 224
     # Define the transformation to apply to the data
     transform = transforms.Compose([
-        transforms.ToTensor(),  # Convert the image to tensor
-        transforms.Normalize((0.5,), (0.5,)),  # Normalize the pixel values to the range [-1, 1]
-        #transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)), 
         transforms.Resize([res_size, res_size], antialias=True),
         ThresholdTransform(thr_255=240),
     ])
@@ -75,6 +73,9 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
+    file_path = os.path.join(os.getcwd(), f'data/{data_dir}/pixel_values.txt')
+    min_fft_pixel_value, max_fft_pixel_value = read_pixel_values(file_path)
+
     # EncoderCNN architecture
     CNN_fc_hidden1, CNN_fc_hidden2 = 1024, 1024
     # Build model
@@ -84,10 +85,12 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     model_params = list(resnet_vae.parameters())
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
-    loss_function = MaterialSimilarityLoss(device, content_layer=content_layer, style_layer=style_layer, 
-                                           spatial_stat_loss_reduction=spatial_stat_loss_reduction,
-                                           normalize_spatial_stat_tensors=normalize_spatial_stat_tensors, 
-                                           soft_equality_eps=soft_equality_eps)
+    loss_function = MaterialSimilarityLoss(
+        device, 
+        min_fft_pixel_value, max_fft_pixel_value,
+        content_layer=content_layer, style_layer=style_layer, 
+        spatial_stat_loss_reduction=spatial_stat_loss_reduction, normalize_spatial_stat_tensors=normalize_spatial_stat_tensors, soft_equality_eps=soft_equality_eps
+        )
     a_spst_scheduler = LossCoefficientScheduler(a_spst, epochs, mode="sigmoid")
 
     print({
@@ -134,16 +137,13 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             "KLD_validation_loss": kld_loss,
             "overall_training_loss": overall_training_loss,
             "overall_validation_loss": overall_loss,
-            "content_validation_loss": content_loss, 
-            "content_training_loss": content_training_loss, 
-            "style_training_loss": style_training_loss,
-            "style_validation_loss": style_loss,
             "mu_training": mu_train,
             "mu_test": mu_test,
             "logvar_train": logvar_train,
             "logvar_test": logvar_test,
             "alpha_mse": a_mse,
             "alpha_spst": a_spst,
+            "KLD_beta": beta,
             }
         wandb.log(metrics)
 
@@ -161,7 +161,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
             print("Data and model-optimizer params saved successfully.")
             
-            grid = generate_from_noise(resnet_vae, device, 16)
+            grid = generate_from_noise(resnet_vae, device, 16, loss_function.spst_loss.calculate_two_point_autocorr_pytorch)
             imgs = wandb.Image(grid, caption="(Genearted image for validation, Genearted image autocorrelation)")
             wandb.log({'Validation generated images from noise': imgs})
             print("Validation images generated from noise successfully.")
