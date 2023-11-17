@@ -15,7 +15,7 @@ parameters:
   bottleneck_size:
     value: 256
   learning_rate:
-    values: [0.01]
+    values: [0.01, 0.1]
   a_mse:
     value: 0.0
   a_content:
