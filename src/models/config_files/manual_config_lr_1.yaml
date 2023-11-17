@@ -4,22 +4,42 @@ metric:
   goal: minimize
   name: overall_loss
 parameters:
+  debugging:
+    value: false
+  dataset_name:
+    values: ["shapes"]
   epochs:
-    value: 60
-  learning_rates:
-    values: [[0.005, 0.0005], [0.01, 0.0001]]
+    value: 100
+  batch_size:
+    value: 32
+  bottleneck_size:
+    value: 256
+  learning_rate:
+    values: [0.01]
   a_mse:
-    value: 0.15
+    value: 0.0
   a_content:
     value: 0.0
   a_style:
     value: 0.0
   a_spst:
-    value: 0.85
+    value: 1.0
+  beta_max:
+    value: 1
   content_layer:
     value: 1
   style_layer:
     value: 1  
+  spatial_stats_loss_reduction_type:
+    values: ["sum"]
+  normalize_spatial_stats_tensors:
+    values: [true]
+  soft_equality_eps:
+    values: [0.25]
+  schedule_KLD:
+    values: [true]
+  schedule_spst:
+    values: [false]
 early_terminate:
   type: hyperband
   s: 2
