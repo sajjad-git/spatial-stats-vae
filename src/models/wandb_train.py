@@ -25,17 +25,19 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
                 log_interval=2, save_interval=20, resume_training=False, last_epoch=0, 
                 schedule_KLD=False, schedule_spst=False, 
                 dataset_name='shapes',
-                debugging=False):
+                debugging=False,
+                seed=110):
     
-    seed=110
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_shapesData_" + f"lr{learning_rate}" + f"bs{batch_size}" +\
-          f"_a_mse_{a_mse}" + f"_a_content_{a_content}" + f"_a_style_{a_style}" +\
-              f"_a_spst_{a_spst}" + f"_content_layer_{content_layer}" +\
-                 f"_style_layer_{style_layer}" + "_sum_reduction_mse_loss" +\
-                      f"_KLD_scheduling_{schedule_KLD}" + f"spatial_stats_loss_scheduled_{schedule_spst}"
+    run_name = "resnetVAE_" + f"lr{learning_rate}" + f"bs{batch_size}" +\
+                f"_a_spst_{a_spst}" + f"_KLD_beta_{beta}"+\
+                f"_spst_reduction_loss_{spatial_stat_loss_reduction}" +\
+                f"_KLD_scheduled_{schedule_KLD}" + f"_spatial_stats_loss_scheduled_{schedule_spst}" +\
+                f"_bottleneck_size_{CNN_embed_dim}" +\
+                f"_dataset_name_{dataset_name}" +\
+                f"_seed_{seed}"
     
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
@@ -184,10 +186,10 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
 
         # save gradient stats
         total_grads = write_gradient_stats(resnet_vae)
-        wandb.log({'Total gradients mean': total_grads.mean(), "Total gradients std": total_grads.std()})
-        wandb.log({'mse gradients mean': np.mean(mse_grads), "mse gradients std": np.std(mse_grads)})
-        wandb.log({'spst gradients mean': np.mean(spst_grads), "spst gradients std": np.std(spst_grads)})
-        wandb.log({'kl gradients mean': np.mean(kld_grads), "kl gradients std": np.std(kld_grads)})
+        wandb.log({'Total gradients mean': np.abs(total_grads).mean(), "Total gradients std": total_grads.std()})
+        wandb.log({'mse gradients mean': np.mean(np.abs(mse_grads)), "mse gradients std": np.std(mse_grads)})
+        wandb.log({'spst gradients mean': np.mean(np.abs(spst_grads)), "spst gradients std": np.std(spst_grads)})
+        wandb.log({'kl gradients mean': np.mean(np.abs(kld_grads)), "kl gradients std": np.std(kld_grads)})
         print("Gradients saved successfully.")
 
         print(f"epoch time elapsed {time.time() - start} seconds")
