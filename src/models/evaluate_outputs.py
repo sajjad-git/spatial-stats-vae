@@ -73,5 +73,5 @@ if __name__ == "__main__":
     # Process the differences as needed
     # For example, printing the sum of differences for each pair
     for i, diff in enumerate(differences):
-        print(f"Sum of differences for image pair {i}: {torch.sum(diff).item()}")
+        print(f"Sum of differences for image pair {i}: {diff} pixels")
 
