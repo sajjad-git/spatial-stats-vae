@@ -275,3 +275,39 @@ def read_pixel_values(file_path):
         min_pixel_value = float(lines[1].strip().split(': ')[1])
         max_pixel_value = float(lines[0].strip().split(': ')[1])
     return min_pixel_value, max_pixel_value
+
+
+def reconstruct_images(vae_model, data_loader, device, num_examples=100):
+    vae_model.eval()  # Set the model to evaluation mode
+    reconstructed_images = []
+    original_images = []
+    reconstruct_autocorrs = []
+    original_autocorrs = []
+    autocorrelation = TwoPointAutocorrelation()
+
+    with torch.no_grad():
+        for batch_idx, (X, _) in enumerate(data_loader):
+            # Move the input to the device
+            X = X.to(device)
+            
+            # Perform the reconstruction
+            X_reconst, _, _, _ = vae_model(X)
+
+            # Collect original and reconstructed images
+            original_images.append(X.cpu())
+            reconstructed_images.append(X_reconst.cpu())
+
+            # Collect original and reconstructed autocorrelations
+            for i in range(len(X)):
+                original_autocorrs.append(autocorrelation.forward(X.cpu()[i]))
+                reconstruct_autocorrs.append(autocorrelation.forward(X_reconst.cpu()[i]))
+
+            if len(reconstructed_images) * data_loader.batch_size >= num_examples:
+                break
+
+    # Convert the list of batches into a single tensor
+    original_images = torch.cat(original_images, dim=0)
+    reconstructed_images = torch.cat(reconstructed_images, dim=0)
+    original_autocorrs = torch.cat(original_autocorrs, dim=0).unsqueeze(1)
+    reconstruct_autocorrs = torch.cat(reconstruct_autocorrs, dim=0).unsqueeze(1)
+    return original_images[:num_examples], reconstructed_images[:num_examples], original_autocorrs[:num_examples], reconstruct_autocorrs[:num_examples]

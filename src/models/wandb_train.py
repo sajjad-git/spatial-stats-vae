@@ -9,13 +9,14 @@ from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 
 from resnet_vae import ResNet_VAE
+from small_vae import SmallVAE
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, '../data')
 from shapes_dataset import ShapesDataset
 from lines_dataset import LinesDataset
 from utils import ThresholdTransform, check_mkdir
-from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, write_gradient_stats, read_pixel_values
+from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, write_gradient_stats, read_pixel_values, reconstruct_images
 
 def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, 
                 content_layer, style_layer, 
@@ -81,10 +82,13 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     # EncoderCNN architecture
     CNN_fc_hidden1, CNN_fc_hidden2 = 1024, 1024
     # Build model
-    resnet_vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
-    resnet_vae.resnet.requires_grad_(False)
-    wandb.watch(resnet_vae)
-    model_params = list(resnet_vae.parameters())
+    #vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
+    #vae.resnet.requires_grad_(False)
+
+    vae = SmallVAE(bottleneck_size=CNN_embed_dim)
+
+    wandb.watch(vae)
+    model_params = list(vae.parameters())
     optimizer = torch.optim.Adam(model_params, lr=learning_rate)
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(
@@ -104,7 +108,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     
     if resume_training:
         assert last_epoch != None
-        resnet_vae.load_state_dict(torch.load(os.path.join(save_model_path,f'model_epoch{last_epoch}.pth')))
+        vae.load_state_dict(torch.load(os.path.join(save_model_path,f'model_epoch{last_epoch}.pth')))
         optimizer.load_state_dict(torch.load(os.path.join(save_model_path,f'optimizer_epoch{last_epoch}.pth')))
         print("Resuming pretrained model...")
     else:
@@ -126,8 +130,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
 
         # train, test model
         start = time.time()
-        X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads = train(log_interval, resnet_vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
-        X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(resnet_vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
+        X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads = train(log_interval, vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
+        X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
         metrics = {
@@ -156,14 +160,22 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
         
         save_condition = True if debugging else (epoch + 1) % save_interval == 0
         if save_condition:
-            torch.save(resnet_vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
+            torch.save(vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
             torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
             np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
             np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
             np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
             print("Data and model-optimizer params saved successfully.")
             
-            grid = generate_from_noise(resnet_vae, device, 16, loss_function.spst_loss.calculate_two_point_autocorr_pytorch)
+            # save 100 pairs of images
+            orig, recon, orig_autocorr, recon_autocorr = reconstruct_images(vae, valid_loader, device, num_examples=100)
+            np.save(os.path.join(save_model_path, 'original_images_epoch{}.npy'.format(epoch + 1)), orig.numpy())
+            np.save(os.path.join(save_model_path, 'reconstructed_images_epoch{}.npy'.format(epoch + 1)), recon.numpy())
+            np.save(os.path.join(save_model_path, 'original_autocorr_epoch{}.npy'.format(epoch + 1)), orig_autocorr.numpy())
+            np.save(os.path.join(save_model_path, 'reconstructed_autocorr_epoch{}.npy'.format(epoch + 1)), recon_autocorr.numpy())
+            print("Original and reconstructed images and their autocorrelations saved successfully.")
+            
+            grid = generate_from_noise(vae, device, 16, loss_function.spst_loss.calculate_two_point_autocorr_pytorch)
             imgs = wandb.Image(grid, caption="(Genearted image for validation, Genearted image autocorrelation)")
             wandb.log({'Validation generated images from noise': imgs})
             print("Validation images generated from noise successfully.")
@@ -185,7 +197,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             print("Validation autocorr images from inside the spst loss function saved successfully.")
 
         # save gradient stats
-        total_grads = write_gradient_stats(resnet_vae)
+        total_grads = write_gradient_stats(vae)
         wandb.log({'Total gradients mean': np.abs(total_grads).mean(), "Total gradients std": total_grads.std()})
         wandb.log({'mse gradients mean': np.mean(np.abs(mse_grads)), "mse gradients std": np.std(mse_grads)})
         wandb.log({'spst gradients mean': np.mean(np.abs(spst_grads)), "spst gradients std": np.std(spst_grads)})
