@@ -82,10 +82,10 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     # EncoderCNN architecture
     CNN_fc_hidden1, CNN_fc_hidden2 = 1024, 1024
     # Build model
-    #vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
-    #vae.resnet.requires_grad_(False)
+    vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
+    vae.resnet.requires_grad_(False)
 
-    vae = SmallVAE(bottleneck_size=CNN_embed_dim).to(device)
+    #vae = SmallVAE(bottleneck_size=CNN_embed_dim).to(device)
 
     wandb.watch(vae)
     model_params = list(vae.parameters())

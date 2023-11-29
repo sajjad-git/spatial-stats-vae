@@ -23,7 +23,7 @@ def convtrans2D_output_size(img_size, padding, kernel_size, stride):
 
 ## ---------------------- ResNet VAE ---------------------- ##
 class ResNet_VAE(nn.Module):
-    def __init__(self, fc_hidden1=1024, fc_hidden2=768, drop_p=0.3, CNN_embed_dim=256, device=None):
+    def __init__(self, fc_hidden1=1024, fc_hidden2=1024, drop_p=0.2, CNN_embed_dim=256, device=None):
         super(ResNet_VAE, self).__init__()
 
         self.fc_hidden1, self.fc_hidden2, self.CNN_embed_dim = fc_hidden1, fc_hidden2, CNN_embed_dim
