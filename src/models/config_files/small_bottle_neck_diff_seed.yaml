@@ -39,7 +39,7 @@ parameters:
   soft_equality_eps:
     values: [0.25]
   schedule_KLD:
-    values: [true, false]
+    values: [true]
   schedule_spst:
     values: [false]
 early_terminate:
