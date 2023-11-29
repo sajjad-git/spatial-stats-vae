@@ -48,13 +48,12 @@ def main(save_model_path, epoch):
 
 if __name__ == "__main__":
     # Parse command line arguments
-    #parser = argparse.ArgumentParser(description="Run VAE model reconstruction")
-    #parser.add_argument("save_model_path", type=str, help="Path to save the model")
-    #parser.add_argument("epoch", type=int, help="Epoch number")
+    parser = argparse.ArgumentParser(description="Run VAE model reconstruction")
+    parser.add_argument("save_model_path", type=str, help="Path to save the model")
+    parser.add_argument("epoch", type=int, help="Epoch number")
 
-    #args = parser.parse_args()
-    save_model_path = "/Users/sajjad/Desktop/argonne/AI-generated-chemical-materials/models/resnetVAE_lr0.001bs2_a_spst_1_KLD_beta_1_spst_reduction_loss_sum_KLD_scheduled_False_spatial_stats_loss_scheduled_False_bottleneck_size_9_dataset_name_lines_seed_110"
-    epoch=1
+    args = parser.parse_args()
+
     # Call main function with parsed arguments
-    #main(args.save_model_path, args.epoch)
-    main(save_model_path, epoch)
+    main(args.save_model_path, args.epoch)
+
