@@ -85,7 +85,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     #vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
     #vae.resnet.requires_grad_(False)
 
-    vae = SmallVAE(bottleneck_size=CNN_embed_dim)
+    vae = SmallVAE(bottleneck_size=CNN_embed_dim).to(device)
 
     wandb.watch(vae)
     model_params = list(vae.parameters())
@@ -174,7 +174,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             np.save(os.path.join(save_model_path, 'original_autocorr_epoch{}.npy'.format(epoch + 1)), orig_autocorr.numpy())
             np.save(os.path.join(save_model_path, 'reconstructed_autocorr_epoch{}.npy'.format(epoch + 1)), recon_autocorr.numpy())
             print("Original and reconstructed images and their autocorrelations saved successfully.")
-            
+
             grid = generate_from_noise(vae, device, 16, loss_function.spst_loss.calculate_two_point_autocorr_pytorch)
             imgs = wandb.Image(grid, caption="(Genearted image for validation, Genearted image autocorrelation)")
             wandb.log({'Validation generated images from noise': imgs})
