@@ -27,7 +27,7 @@ def main(save_model_path, epoch):
     vae.load_state_dict(torch.load(model_path))
 
     data_dir = 'lines'
-    dataset_path = "/Users/sajjad/Desktop/argonne/AI-generated-chemical-materials/data"
+    dataset_path = os.path.join(os.getcwd(), "data")
     transform = transforms.Compose([
             transforms.ToTensor(),  # Convert the image to tensor
             transforms.Normalize((0.5,), (0.5,)), 
