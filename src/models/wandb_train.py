@@ -38,7 +38,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
                 f"_KLD_scheduled_{schedule_KLD}" + f"_spatial_stats_loss_scheduled_{schedule_spst}" +\
                 f"_bottleneck_size_{CNN_embed_dim}" +\
                 f"_dataset_name_{dataset_name}" +\
-                f"_seed_{seed}"
+                f"_seed_{seed}" +\
+                f"_with_similarity_penalty"
     
     save_model_path = os.path.join(save_dir, run_name)
     check_mkdir(save_model_path)    
@@ -132,13 +133,15 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
         start = time.time()
         X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads = train(log_interval, vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
-        mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
-        mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
+        mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, training_sim_pen, kld_training_loss, overall_training_loss = training_losses
+        mse_loss, content_loss, style_loss, spst_loss, validation_sim_pen, kld_loss, overall_loss = validation_losses
         metrics = {
             "mse_training_loss": mse_training_loss, 
             "mse_validation_loss": mse_loss, 
             "spatial_stats_training_loss": spst_training_loss,
             "spatial_stats_validation_loss": spst_loss,
+            "training_similarity_penalty": training_sim_pen,
+            "validation_similarity_penalty": validation_sim_pen,
             "KLD_training_loss": kld_training_loss,
             "KLD_validation_loss": kld_loss,
             "overall_training_loss": overall_training_loss,

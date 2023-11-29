@@ -28,8 +28,11 @@ class MaterialSimilarityLoss(nn.Module):
         self.spst_loss = TwoPointSpatialStatsLoss(device, min_fft_pxl_val, max_fft_pxl_val, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
+        self.previous_reconstructions = {}
+        self.epsilon = 1e-6
+        self.alpha = 1
 
-    def forward(self, x, recon_x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
+    def forward(self, x, recon_x, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
         MSE = F.mse_loss(x, recon_x, reduction='sum')
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
@@ -37,10 +40,21 @@ class MaterialSimilarityLoss(nn.Module):
         CONTENTLOSS=torch.Tensor([0]).to(self.device)
         STYLELOSS=torch.Tensor([0]).to(self.device)
         #---------------------------
+
+        # --------------------------------------------------------
+        # Similarity penalty
+        similarity_penalty = torch.Tensor([0]).to(self.device)
+        if y in self.previous_reconstructions:
+            mse_similarity = nn.functional.mse_loss(recon_x, self.previous_reconstructions[y])
+            similarity_penalty = self.alpha / (mse_similarity + self.epsilon)
+        # Update memory with the current reconstructions
+        self.previous_reconstructions[y] = recon_x.detach().clone()
+        # --------------------------------------------------------
+
         SPST, input_autocorr, recon_autocorr = self.spst_loss(x, recon_x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS 
-        return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, overall_loss, input_autocorr, recon_autocorr
+        overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS + similarity_penalty
+        return MSE, CONTENTLOSS, STYLELOSS, SPST, similarity_penalty, KLD, overall_loss, input_autocorr, recon_autocorr
 
 
 class ExponentialScheduler:
@@ -137,8 +151,8 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
         N_count += X.size(0)
 
         X_reconst, z, mu, logvar = model(X)  # VAE
-        mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-        loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+        mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+        loss_values = (mse.item(), content.item(), style.item(), spst.item(), sim_pen.item(), kld.item(), loss.item())
 
         #if batch_idx % 100 == 0:
         if batch_idx < 1:
@@ -191,8 +205,8 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             X, y = X.to(device), y.to(device).view(-1, )
             X_reconst, z, mu, logvar = model(X)
 
-            mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-            loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+            mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+            loss_values = (mse.item(), content.item(), style.item(), spst.item(), sim_pen.item(), kld.item(), loss.item())
             losses.append(loss_values)
             
             if testing and batch_idx > 1:

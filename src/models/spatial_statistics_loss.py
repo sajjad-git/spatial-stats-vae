@@ -14,25 +14,26 @@ class TwoPointSpatialStatsLoss(nn.Module):
         self.min_fft_pixel_value = min_pixel_value
         self.max_fft_pixel_value = max_pixel_value
 
-    def forward(self, input, target):
+    def forward(self, input, recons):
         """
         Computes the loss between input and target tensors using two-point autocorrelation.
 
-        input, target: Torch tensors of shape (bs, 1, H, W)
+        input, recons: Torch tensors of shape (bs, 1, H, W)
 
         Returns:
         nn.Loss, torch tensor (bs, 1, H, W*2)
         """
+        
         input_autocorr = self.calculate_two_point_autocorr_pytorch(input)
-        target_autocorr = self.calculate_two_point_autocorr_pytorch(target)
+        recons_autocorr = self.calculate_two_point_autocorr_pytorch(recons)
 
         if self.filtered:
             input_autocorr = self.mask_tensor(input_autocorr)
-            target_autocorr = self.mask_tensor(target_autocorr)
-        diff = self.mse_loss(input_autocorr, target_autocorr)
+            recons_autocorr = self.mask_tensor(recons_autocorr)
+        diff = self.mse_loss(input_autocorr, recons_autocorr)
         input_and_input_autocorr = torch.cat([input, input_autocorr], axis=3)
-        target_and_target_autocorr = torch.cat([target, target_autocorr], axis=3)
-        return diff, input_and_input_autocorr, target_and_target_autocorr
+        recons_and_recons_autocorr = torch.cat([recons, recons_autocorr], axis=3)
+        return diff, input_and_input_autocorr, recons_and_recons_autocorr
 
     def calculate_two_point_autocorr_pytorch(self, imgs):
         """
