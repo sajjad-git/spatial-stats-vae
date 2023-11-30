@@ -32,7 +32,7 @@ class MaterialSimilarityLoss(nn.Module):
         self.epsilon = 1e-6
         self.alpha = 1
 
-    def forward(self, x, recon_x, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
+    def forward(self, x, recon_x, y, i, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
         MSE = F.mse_loss(x, recon_x, reduction='sum')
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
@@ -43,13 +43,12 @@ class MaterialSimilarityLoss(nn.Module):
 
         # --------------------------------------------------------
         # Similarity penalty
-        similarity_penalty = 0
-        if self.previous_reconstructions is not None and \
-        self.previous_reconstructions.size() == recon_x.size():
-            mse_similarity = F.mse_loss(recon_x, self.previous_reconstructions)
+        similarity_penalty = torch.Tensor([0]).to(self.device)
+        if i==1:
+            mse_similarity = F.mse_loss(recon_x, self.previous_reconstructions, reduction='sum')
             similarity_penalty = self.alpha / (mse_similarity + self.epsilon)
         else:
-            similarity_penalty = torch.tensor(0).float().to(recon_x.device)
+            self.previous_reconstructions = recon_x
         # --------------------------------------------------------
 
         SPST, input_autocorr, recon_autocorr = self.spst_loss(x, recon_x)
@@ -144,15 +143,17 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
 
     losses = []
     N_count = 0   # counting total trained sample in one epoch
-    mse_grads, spst_grads, kld_grads = [], [], []
+    mse_grads, spst_grads, kld_grads, sim_pen_grads = [], [], [], []
 
     for batch_idx, (X, y) in enumerate(train_loader):
         # distribute data to device
         X, y = X.to(device), y.to(device).view(-1, )
         N_count += X.size(0)
 
-        X_reconst, z, mu, logvar = model(X)  # VAE
-        mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+        for i in range(2):
+            X_reconst, z, mu, logvar = model(X)  # VAE
+            mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, i, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+        
         loss_values = (mse.item(), content.item(), style.item(), spst.item(), sim_pen.item(), kld.item(), loss.item())
 
         #if batch_idx % 100 == 0:
@@ -172,6 +173,11 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
             optimizer.zero_grad()
             kld.backward(retain_graph=True)  # No need to retain graph here, unless you have more loss components.
             kld_grads.extend(write_gradient_stats(model))
+
+            # Backward pass for similairty loss
+            optimizer.zero_grad()
+            sim_pen.backward(retain_graph=True)  # No need to retain graph here, unless you have more loss components.
+            sim_pen_grads.extend(write_gradient_stats(model))
         
         optimizer.zero_grad()
         loss.backward()
@@ -192,8 +198,10 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     mse_grads = np.stack(mse_grads, axis=0)
     spst_grads = np.stack(spst_grads, axis=0)
     kld_grads = np.stack(kld_grads, axis=0)
+    sim_pen_grads = np.stack(sim_pen_grads, axis=0)
 
-    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr, mse_grads, spst_grads, kld_grads
+
+    return X.data.cpu().numpy(), y.data.cpu().numpy(), z.data.cpu().numpy(), mu.data.cpu().numpy(), logvar.data.cpu().numpy(), losses, input_autocorr, recon_autocorr, mse_grads, spst_grads, kld_grads, sim_pen_grads
 
 
 def validation(model, criterion, device, test_loader, a_mse, a_content, a_style, a_spst, beta, testing):
@@ -206,7 +214,7 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
             X, y = X.to(device), y.to(device).view(-1, )
             X_reconst, z, mu, logvar = model(X)
 
-            mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+            mse, content, style, spst, sim_pen, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, 0, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
             loss_values = (mse.item(), content.item(), style.item(), spst.item(), sim_pen.item(), kld.item(), loss.item())
             losses.append(loss_values)
             

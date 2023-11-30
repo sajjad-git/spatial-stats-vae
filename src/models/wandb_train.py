@@ -131,7 +131,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
 
         # train, test model
         start = time.time()
-        X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads = train(log_interval, vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
+        X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads, sim_pen_grads = train(log_interval, vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
         mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, training_sim_pen, kld_training_loss, overall_training_loss = training_losses
         mse_loss, content_loss, style_loss, spst_loss, validation_sim_pen, kld_loss, overall_loss = validation_losses
@@ -205,6 +205,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
         wandb.log({'mse gradients mean': np.mean(np.abs(mse_grads)), "mse gradients std": np.std(mse_grads)})
         wandb.log({'spst gradients mean': np.mean(np.abs(spst_grads)), "spst gradients std": np.std(spst_grads)})
         wandb.log({'kl gradients mean': np.mean(np.abs(kld_grads)), "kl gradients std": np.std(kld_grads)})
+        wandb.log({'similarity loss gradients mean': np.mean(np.abs(sim_pen_grads)), "similarity loss gradients std": np.std(sim_pen_grads)})
+
         print("Gradients saved successfully.")
 
         print(f"epoch time elapsed {time.time() - start} seconds")
