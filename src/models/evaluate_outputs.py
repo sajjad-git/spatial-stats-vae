@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import sys
-
+import os 
 def threshold_image(image, threshold=0.05):
     """
     Apply thresholding to the image. Pixels with values below the threshold are set to zero,
@@ -58,14 +58,14 @@ def load_and_compare_images(path1, path2):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python script.py <path_to_first_image_set.npy> <path_to_second_image_set.npy>")
+        print("Usage: python script.py <path_to_dir> <epoch>")
         sys.exit(1)
 
-    path_to_first_image_set = sys.argv[1]
-    path_to_second_image_set = sys.argv[2]
+    path_to_dir = sys.argv[1]
+    epoch = sys.argv[2]
 
-    #path_to_first_image_set = "/Users/sajjad/Desktop/argonne/AI-generated-chemical-materials/models/resnetVAE_lr0.001bs2_a_spst_1_KLD_beta_1_spst_reduction_loss_sum_KLD_scheduled_False_spatial_stats_loss_scheduled_False_bottleneck_size_9_dataset_name_lines_seed_110/original_images_epoch2.npy"
-    #path_to_second_image_set = "/Users/sajjad/Desktop/argonne/AI-generated-chemical-materials/models/resnetVAE_lr0.001bs2_a_spst_1_KLD_beta_1_spst_reduction_loss_sum_KLD_scheduled_False_spatial_stats_loss_scheduled_False_bottleneck_size_9_dataset_name_lines_seed_110/reconstructed_images_epoch2.npy"
+    path_to_first_image_set = os.path.join(path_to_dir, f'original_images_epoch{epoch}.npy')
+    path_to_second_image_set = os.path.join(path_to_dir, f'reconstructed_images_epoch{epoch}.npy')
 
     # Calculate differences
     differences = load_and_compare_images(path_to_first_image_set, path_to_second_image_set)

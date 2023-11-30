@@ -28,7 +28,7 @@ class MaterialSimilarityLoss(nn.Module):
         self.spst_loss = TwoPointSpatialStatsLoss(device, min_fft_pxl_val, max_fft_pxl_val, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
-        self.previous_reconstructions = {}
+        self.previous_reconstructions = None
         self.epsilon = 1e-6
         self.alpha = 1
 
@@ -43,12 +43,13 @@ class MaterialSimilarityLoss(nn.Module):
 
         # --------------------------------------------------------
         # Similarity penalty
-        similarity_penalty = torch.Tensor([0]).to(self.device)
-        if y in self.previous_reconstructions:
-            mse_similarity = nn.functional.mse_loss(recon_x, self.previous_reconstructions[y])
+        similarity_penalty = 0
+        if self.previous_reconstructions is not None and \
+        self.previous_reconstructions.size() == recon_x.size():
+            mse_similarity = F.mse_loss(recon_x, self.previous_reconstructions)
             similarity_penalty = self.alpha / (mse_similarity + self.epsilon)
-        # Update memory with the current reconstructions
-        self.previous_reconstructions[y] = recon_x.detach().clone()
+        else:
+            similarity_penalty = torch.tensor(0).float().to(recon_x.device)
         # --------------------------------------------------------
 
         SPST, input_autocorr, recon_autocorr = self.spst_loss(x, recon_x)
