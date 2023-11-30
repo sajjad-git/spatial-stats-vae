@@ -10,6 +10,7 @@ from torchvision.utils import make_grid
 
 from resnet_vae import ResNet_VAE
 from small_vae import SmallVAE
+from smaller_vae import SmallerVAE
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 sys.path.insert(1, '../data')
@@ -32,7 +33,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_" + f"lr{learning_rate}" + f"bs{batch_size}" +\
+    run_name = "smallerVAE_" + f"lr{learning_rate}" + f"bs{batch_size}" +\
                 f"_a_spst_{a_spst}" + f"_KLD_beta_{beta}"+\
                 f"_spst_reduction_loss_{spatial_stat_loss_reduction}" +\
                 f"_KLD_scheduled_{schedule_KLD}" + f"_spatial_stats_loss_scheduled_{schedule_spst}" +\
@@ -82,10 +83,11 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     # EncoderCNN architecture
     CNN_fc_hidden1, CNN_fc_hidden2 = 1024, 1024
     # Build model
-    vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
-    vae.resnet.requires_grad_(False)
+    #vae = ResNet_VAE(fc_hidden1=CNN_fc_hidden1, fc_hidden2=CNN_fc_hidden2, drop_p=dropout_p, CNN_embed_dim=CNN_embed_dim, device=device).to(device)
+    #vae.resnet.requires_grad_(False)
 
     #vae = SmallVAE(bottleneck_size=CNN_embed_dim).to(device)
+    vae = SmallerVAE(bottleneck_size=CNN_embed_dim).to(device)
 
     wandb.watch(vae)
     model_params = list(vae.parameters())
