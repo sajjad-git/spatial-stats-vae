@@ -9,7 +9,7 @@ from lines_dataset import LinesDataset
 from utils import ThresholdTransform
 from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
-from spatial_statistics_loss import calculate_2pt_autocorr
+from spatial_statistics_loss import TwoPointAutocorrelation
 from PIL import Image
 from torchvision.transforms.functional import to_pil_image
 from PIL import Image
@@ -24,7 +24,7 @@ def normalize(image_np, min_pixel_value, max_pixel_value):
 def transform_and_save(dataset, transform, save_dir):
     max_pixel_value = -np.inf
     min_pixel_value = np.inf
-
+    autocorrelation = TwoPointAutocorrelation()
     for idx, (image_data, _) in tqdm(enumerate(dataset), total=len(dataset)):
         if isinstance(image_data, str):
             image = Image.open(image_data)
@@ -32,7 +32,7 @@ def transform_and_save(dataset, transform, save_dir):
             image = image_data
 
         transformed_image = transform(image)
-        transformed_image = calculate_2pt_autocorr(transformed_image)
+        transformed_image = autocorrelation.forward(transformed_image)
 
         if transformed_image.dim() == 3 and transformed_image.shape[0] == 1:  # If single channel image
             transformed_image = transformed_image.squeeze(0)
@@ -73,6 +73,9 @@ def main():
     elif dataset_name == 'shapes':
         data_dir = 'shapes'
         dataset = ShapesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'))
+    elif dataset_name == 'multiple_lines':
+        data_dir = 'multiple_lines'
+        dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'))
     else:
         print(f"Dataset {dataset_name} not recognized.")
         sys.exit(1)
