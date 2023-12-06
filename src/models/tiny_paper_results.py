@@ -6,6 +6,8 @@ from torchvision import transforms
 import numpy as np
 import torch.nn.functional as F
 from tqdm import tqdm
+import time
+
 from resnet_vae import ResNet_VAE
 from training_utils import seed_everything, reconstruct_images
 from lines_dataset import LinesDataset
@@ -14,7 +16,7 @@ from evaluate_outputs import threshold_image
 from spatial_statistics_loss import TwoPointAutocorrelation, TwoPointSpatialStatsLoss
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-save_model_path = "/home/sajad/AI-generated-chemical-materials/models/resnetVAE_lr0.001bs32_a_spst_1_KLD_beta_1_spst_reduction_loss_sum_KLD_scheduled_True_spatial_stats_loss_scheduled_False_bottleneck_size_9_dataset_name_multiple_lines_seed_127"
+
 save_model_path = "/home/sajad/AI-generated-chemical-materials/models/resnetVAE_lr0.001bs32_a_spst_1_KLD_beta_1_spst_reduction_loss_sum_KLD_scheduled_False_spatial_stats_loss_scheduled_False_bottleneck_size_9_dataset_name_multiple_lines_seed_125"
 epoch=1500
 seed = 125
@@ -41,7 +43,7 @@ transform = transforms.Compose([
 dataset = LinesDataset(f'{dataset_path}/{data_dir}/labels.csv', f'{dataset_path}/{data_dir}/images', transform)
 train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*0.7), int(len(dataset)) - int(len(dataset)*0.7)])
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+#valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
 # display 200 pairs of images
 orig, recon, orig_autocorr, recon_autocorr = reconstruct_images(vae, train_loader, device, num_examples=1)
@@ -83,6 +85,7 @@ spatial_stats_mse_means = []
 spatial_stats_mse_stds = []
 
 for i in tqdm(range(len(orig)), desc="Analyzing Images"):
+    start_time = time.time()
     # Safely squeeze tensors to handle dimensionality
     original = orig[i]
     reconstruction = recon[i]
@@ -115,8 +118,8 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
     min_mse = float('inf')
     most_similar_image = None
 
-    # Iterate over validation set
-    for val_images, y in tqdm(valid_loader, desc=f"Processing Validation Set for Image {i}"):
+    # Iterate over training set
+    for val_images, y in tqdm(train_loader, desc=f"Processing training Set for Image {i}"):
         for val_image in val_images:
             mse = F.mse_loss(reconstruction, val_image)
             mse_list.append(mse.item())
@@ -124,7 +127,7 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
                 min_mse = mse
                 most_similar_image = val_image
 
-    # d. Average and Std of MSEs with Validation Set
+    # d. Average and Std of MSEs with training Set
     avg_mse = np.mean(mse_list)
     std_mse = np.std(mse_list)
     msg = f"Average MSE: {avg_mse}, Standard Deviation of MSEs: {std_mse}\n"
@@ -136,8 +139,8 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
     min_spatial_stats_mse = float('inf')
     most_similar_spatial_stats_image = None
 
-    # Iterate over validation set with tqdm for spatial statistics
-    for val_images, y in tqdm(valid_loader, desc=f"Processing Spatial Stats for Image {i}"):
+    # Iterate over training set with tqdm for spatial statistics
+    for val_images, y in tqdm(train_loader, desc=f"Processing Spatial Stats for Image {i}"):
         for val_image in val_images:
             val_spatial_stats = autocorr_func.forward(val_image)
             mse_spatial_stats = F.mse_loss(recon_spst, val_spatial_stats)
@@ -166,20 +169,32 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
     # -------------------------------------------------------
     fig = plt.figure(figsize=(40, 20)) 
     
-    def save_plot(ax, image_name, fig):
+    x_values = np.linspace(-orig_spst.shape[-1] // 2, orig_spst.shape[-1] // 2, orig_spst.shape[-1])
+    y_values = np.linspace(-orig_spst.shape[-2] // 2, orig_spst.shape[-2] // 2, orig_spst.shape[-2])
+
+    def save_plot(ax, image_name, fig, autocorr=None):
         image_dir = os.path.join(analysis_dir, f"sample_{i}")
         if not os.path.exists(image_dir):
             os.makedirs(image_dir)
         plot_filename = os.path.join(image_dir, f'{image_name}_{i}.pdf')
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        fig.savefig(plot_filename, bbox_inches=extent.expanded(1.1, 1.1))
+        
+        if autocorr is not None:
+            _, mini_ax = plt.subplots()
+            im = mini_ax.imshow(autocorr.squeeze().cpu().numpy(), origin='lower', interpolation='none', cmap='gray', extent=[x_values[0], x_values[-1], y_values[0], y_values[-1]])
+            plt.colorbar(im, ax=mini_ax)
+            plt.savefig(plot_filename)
+            plt.close()
+        else:
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(plot_filename, bbox_inches=extent.expanded(1.1, 1))
+
 
     # Display original and reconstructed images side by side
     ax1 = fig.add_subplot(2, 4, 1)
     ax1.imshow(original.squeeze().cpu().numpy(), cmap='gray')
     ax1.axis('off')
     save_plot(ax1, "original_image", fig)
-    ax1.set_title('Original Image')
+    ax1.set_title(f'Original Image Sample {i}')
 
     # Reconstructed Image
     ax2 = fig.add_subplot(2, 4, 2)
@@ -191,18 +206,16 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
     # Original Spatial Stats
     ax3 = fig.add_subplot(2, 4, 5)
     orig_spst = orig_autocorr[i]
-    x_values = np.linspace(-orig_spst.shape[-1] // 2, orig_spst.shape[-1] // 2, orig_spst.shape[-1])
-    y_values = np.linspace(-orig_spst.shape[-2] // 2, orig_spst.shape[-2] // 2, orig_spst.shape[-2])
     im = ax3.imshow(orig_spst.squeeze().cpu().numpy(), origin='lower', interpolation='none', cmap='gray', extent=[x_values[0], x_values[-1], y_values[0], y_values[-1]])
     plt.colorbar(im, ax=ax3)
-    save_plot(ax3, "reconstructed_image_autocorrelation", fig)
+    save_plot(ax3, "reconstructed_image_autocorrelation", fig, autocorr=orig_spst)
     ax3.set_title('Original Spatial Stats')
 
     # Reconstructed Spatial Stats
     ax4 = fig.add_subplot(2, 4, 6)
     im = ax4.imshow(recon_spst.squeeze().cpu().numpy(), origin='lower', interpolation='none', cmap='gray', extent=[x_values[0], x_values[-1], y_values[0], y_values[-1]])
     plt.colorbar(im, ax=ax4)
-    save_plot(ax4, "original_image_autocorrelation", fig)
+    save_plot(ax4, "original_image_autocorrelation", fig, autocorr=recon_spst)
     ax4.set_title('Reconstructed Spatial Stats')
 
     # f. Display and save most similar image
@@ -241,6 +254,9 @@ for i in tqdm(range(len(orig)), desc="Analyzing Images"):
     save_histogram(spatial_stats_mse_means, 'Spatial Stats MSE Means', 'spatial_stats_mse_means')
     save_histogram(spatial_stats_mse_stds, 'Spatial Stats MSE Standard Deviations', 'spatial_stats_mse_stds')
 
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time} seconds")
     # end plotting -------------------------------------------------------
 
 pdf.close()
