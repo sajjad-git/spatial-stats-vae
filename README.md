@@ -7,3 +7,4 @@ To run training,
 3. Run setup.sh by running ./setup.sh in terminal.
 4. If you're running the training for the first time, the code will
 ask for a WandB API key. Enter a valid API key.
+5. To see our tiny paper, see toward_learning_latent_variable.pdf.
