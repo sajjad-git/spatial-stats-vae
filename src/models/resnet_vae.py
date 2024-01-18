@@ -72,13 +72,13 @@ class ResNet_VAE(nn.Module):
             nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=self.k4, stride=self.s4,
                                padding=self.pd4),
             nn.BatchNorm2d(32, momentum=0.01),
-            nn.ReLU(inplace=True),
+            self.relu,
         )
         self.convTrans7 = nn.Sequential(
             nn.ConvTranspose2d(in_channels=32, out_channels=8, kernel_size=self.k3, stride=self.s3,
                                padding=self.pd3),
             nn.BatchNorm2d(8, momentum=0.01),
-            nn.ReLU(inplace=True),
+            self.relu,
         )
 
         self.convTrans8 = nn.Sequential(

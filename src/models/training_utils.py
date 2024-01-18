@@ -14,7 +14,7 @@ from loss_coefficients import normal_dist_coefficients
 
 class MaterialSimilarityLoss(nn.Module):
 
-    def __init__(self, device, min_fft_pxl_val, max_fft_pxl_val, content_layer=4, style_layer=4, spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25):
+    def __init__(self, device, include_batch_similarity_loss, min_fft_pxl_val, max_fft_pxl_val, content_layer=4, style_layer=4, spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25):
         """
         content_layer (int) is the layer that will be focused on the most;
         Same with the style layer.
@@ -23,13 +23,14 @@ class MaterialSimilarityLoss(nn.Module):
         """
         super(MaterialSimilarityLoss, self).__init__()
         self.device = device
+        self.include_batch_similarity_loss = include_batch_similarity_loss
         #self.content_layers = {layer: ContentLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         #self.style_layers = {layer: StyleLoss(f"conv_{layer}", device) for layer in range(1, 6)}
         self.spst_loss = TwoPointSpatialStatsLoss(device, min_fft_pxl_val, max_fft_pxl_val, filtered=False, normalize_spatial_stats_tensors=normalize_spatial_stat_tensors, reduction=spatial_stat_loss_reduction, soft_equality_eps=soft_equality_eps)
         #self.content_layer_coefficients = normal_dist_coefficients(content_layer)
         #self.style_layer_coefficients = normal_dist_coefficients(style_layer)
-
-    def forward(self, x, recon_x, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
+    #def forward(self, x, recon_x, y, new_batch_images, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
+    def forward(self, x, recon_x, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta):
         MSE = F.mse_loss(x, recon_x, reduction='sum')
         #CONTENTLOSS = sum(self.content_layer_coefficients[i-1] * self.content_layers[i](recon_x, x) for i in range(1, 6))
         #STYLELOSS = sum(self.style_layer_coefficients[i-1] * self.style_layers[i](recon_x, x) for i in range(1, 6))
@@ -37,10 +38,43 @@ class MaterialSimilarityLoss(nn.Module):
         CONTENTLOSS=torch.Tensor([0]).to(self.device)
         STYLELOSS=torch.Tensor([0]).to(self.device)
         #---------------------------
+        if self.include_batch_similarity_loss:
+            batch_difference = batch_similarity_loss(recon_x, y, self.device)
+            # batch_difference = F.mse_loss(recon_x, new_batch_images)
+        else:
+            batch_difference = torch.Tensor([0]).to(self.device)
+            
         SPST, input_autocorr, recon_autocorr = self.spst_loss(x, recon_x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS 
-        return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, overall_loss, input_autocorr, recon_autocorr
+        overall_loss = a_mse*MSE + a_spst*SPST + beta*KLD + a_content*CONTENTLOSS + a_style*STYLELOSS + batch_difference
+        return MSE, CONTENTLOSS, STYLELOSS, SPST, KLD, batch_difference, overall_loss, input_autocorr, recon_autocorr
+
+
+def batch_similarity_loss(batch, labels, device):
+    """
+    Calculate batch similarity loss.
+    
+    :param batch: Tensor of shape (32, feature_size) - the batch of elements.
+    :param labels: Tensor of shape (32,) - the labels corresponding to each element in the batch.
+    :return: Mean similarity loss over the batch.
+    """
+    n = batch.size(0)
+    loss = 0.0
+    count = 0
+    processed_pairs = set()
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            # Check if labels are the same and the pair hasn't been processed
+            if labels[i] == labels[j] and (i, j) not in processed_pairs:
+                mse_loss = F.mse_loss(batch[i], batch[j], reduction='mean')
+                loss += mse_loss
+                count += 1
+                # Mark this pair as processed
+                processed_pairs.add((i, j))
+
+    # Average the loss over the number of elements that had similar pairs
+    return loss / count if count > 0 else torch.tensor(0.0).to(device)
 
 
 class ExponentialScheduler:
@@ -130,15 +164,17 @@ def train(log_interval, model, criterion, device, train_loader, optimizer, epoch
     losses = []
     N_count = 0   # counting total trained sample in one epoch
     mse_grads, spst_grads, kld_grads = [], [], []
+    
 
     for batch_idx, (X, y) in enumerate(train_loader):
+        # new_batch_images, new_batch_labels = get_random_images_with_matching_labels(train_loader, X, y)
         # distribute data to device
         X, y = X.to(device), y.to(device).view(-1, )
         N_count += X.size(0)
 
         X_reconst, z, mu, logvar = model(X)  # VAE
-        mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-        loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+        mse, content, style, spst, kld, batch_difference, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+        loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), batch_difference.item(), loss.item())
 
         #if batch_idx % 100 == 0:
         if batch_idx < 1:
@@ -187,12 +223,13 @@ def validation(model, criterion, device, test_loader, a_mse, a_content, a_style,
     losses = []
     with torch.no_grad():
         for batch_idx, (X, y) in enumerate(test_loader):
+            # new_batch_images, new_batch_labels = get_random_images_with_matching_labels(test_loader, X, y)
             # distribute data to device
             X, y = X.to(device), y.to(device).view(-1, )
             X_reconst, z, mu, logvar = model(X)
 
-            mse, content, style, spst, kld, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
-            loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), loss.item())
+            mse, content, style, spst, kld, batch_difference, loss, input_autocorr, recon_autocorr = criterion(X, X_reconst, y, mu, logvar, a_mse, a_content, a_style, a_spst, beta)
+            loss_values = (mse.item(), content.item(), style.item(), spst.item(), kld.item(), batch_difference.item(), loss.item())
             losses.append(loss_values)
             
             if testing and batch_idx > 1:
@@ -277,12 +314,15 @@ def read_pixel_values(file_path):
     return min_pixel_value, max_pixel_value
 
 
-def reconstruct_images(vae_model, data_loader, device, num_examples=100):
+def reconstruct_images(vae_model, data_loader, device, num_examples=100, should_test_vae_robustness=False, perturbation=0.1):
     vae_model.eval()  # Set the model to evaluation mode
     reconstructed_images = []
     original_images = []
     reconstruct_autocorrs = []
     original_autocorrs = []
+    p_reconstructed_images = []
+    p_reconstruct_autocorrs = []
+
     autocorrelation = TwoPointAutocorrelation()
 
     with torch.no_grad():
@@ -291,7 +331,15 @@ def reconstruct_images(vae_model, data_loader, device, num_examples=100):
             X = X.to(device)
             
             # Perform the reconstruction
-            X_reconst, _, _, _ = vae_model(X)
+            if should_test_vae_robustness:
+                X_reconst, _, _, _ = vae_model(X)
+                p_X_reconst, _ = test_vae_robustness(vae_model, X, noise_level=perturbation)
+                p_reconstructed_images.append(p_X_reconst.cpu())
+                # Collect original and reconstructed autocorrelations
+                for i in range(len(X)):
+                    p_reconstruct_autocorrs.append(autocorrelation.forward(p_X_reconst.cpu()[i]))
+            else:
+                X_reconst, _, _, _ = vae_model(X)
 
             # Collect original and reconstructed images
             original_images.append(X.cpu())
@@ -310,4 +358,59 @@ def reconstruct_images(vae_model, data_loader, device, num_examples=100):
     reconstructed_images = torch.cat(reconstructed_images, dim=0)
     original_autocorrs = torch.cat(original_autocorrs, dim=0).unsqueeze(1)
     reconstruct_autocorrs = torch.cat(reconstruct_autocorrs, dim=0).unsqueeze(1)
-    return original_images[:num_examples], reconstructed_images[:num_examples], original_autocorrs[:num_examples], reconstruct_autocorrs[:num_examples]
+    if should_test_vae_robustness:
+        p_reconstructed_images = torch.cat(p_reconstructed_images, dim=0)
+        p_reconstruct_autocorrs = torch.cat(p_reconstruct_autocorrs, dim=0).unsqueeze(1)
+        return original_images[:num_examples], reconstructed_images[:num_examples], original_autocorrs[:num_examples], reconstruct_autocorrs[:num_examples], p_reconstructed_images[:num_examples], reconstruct_autocorrs[:num_examples]
+    else:
+        return original_images[:num_examples], reconstructed_images[:num_examples], original_autocorrs[:num_examples], reconstruct_autocorrs[:num_examples]
+
+
+def test_vae_robustness(model, x, noise_level=0.1):
+    # Encode input
+    mu, logvar = model.encode(x)
+    z = model.reparameterize(mu, logvar)
+
+    # Add perturbation
+    noise = torch.randn_like(z) * noise_level
+    z_perturbed = z + noise
+
+    # Decode
+    x_reconst_perturbed = model.decode(z_perturbed)
+
+    return x_reconst_perturbed, z_perturbed
+
+
+def get_random_images_with_matching_labels(dataloader, input_batch_images, input_batch_labels):
+    """
+    Retrieves a batch of random images from the dataset with the same labels as the input batch.
+
+    :param dataloader: DataLoader for the dataset.
+    :param input_batch_images: Tensor of images from the input batch.
+    :param input_batch_labels: Tensor of labels from the input batch.
+    :return: Tuple (new_batch_images, new_batch_labels), where new_batch_images contains random images with labels matching those in new_batch_labels.
+    """
+    # Determine the device of the input tensors
+    device = input_batch_images.device
+
+    # Convert DataLoader dataset to list for easier processing
+    dataset_list = list(dataloader.dataset)
+
+    new_batch_images = []
+    new_batch_labels = []
+
+    for label in input_batch_labels:
+        # Filter dataset for images with the same label
+        same_label_images = [item[0].to(device) for item in dataset_list if item[1] == label.item()]
+        
+        # Randomly select one image with the same label
+        if same_label_images:
+            random_image = random.choice(same_label_images)
+            new_batch_images.append(random_image)
+            new_batch_labels.append(label)
+
+    # Convert lists to tensors
+    new_batch_images_tensor = torch.stack(new_batch_images).to(device)
+    new_batch_labels_tensor = torch.stack(new_batch_labels).to(device)
+
+    return new_batch_images_tensor, new_batch_labels_tensor

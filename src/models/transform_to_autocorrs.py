@@ -6,6 +6,7 @@ from PIL import Image
 import numpy as np
 from shapes_dataset import ShapesDataset
 from lines_dataset import LinesDataset
+from diagonal_lines_dataset import DiagonalLinesDataset
 from utils import ThresholdTransform
 from tqdm import tqdm
 from torchvision.transforms.functional import to_pil_image
@@ -76,6 +77,9 @@ def main():
     elif dataset_name == 'multiple_lines':
         data_dir = 'multiple_lines'
         dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'))
+    elif dataset_name=="three_to_five_lines_diag":
+        data_dir="three_to_five_lines_diag"
+        dataset = DiagonalLinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'))
     else:
         print(f"Dataset {dataset_name} not recognized.")
         sys.exit(1)

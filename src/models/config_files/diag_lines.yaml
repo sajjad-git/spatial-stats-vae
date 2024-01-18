@@ -7,21 +7,23 @@ parameters:
   debugging:
     value: false
   seed:
-    value: 127
+    value: 125
   dataset_name:
-    values: ["multiple_lines"]
+    values: ["three_to_five_lines_diag"]
   resume_training:
     value: false
   last_epoch:
-    value: 0
+    value: 0 
   epochs:
-    value: 1500
+    value: 100
   batch_size:
     value: 32
   bottleneck_size:
     values: [9]
   learning_rate:
     values: [0.001]
+  batch_similarity_loss:
+    values: [false]
   a_mse:
     value: 0.0
   a_content:
@@ -46,10 +48,8 @@ parameters:
     values: [false]
   schedule_spst:
     values: [false]
-  batch_similarity_loss:
-    values: [false]
   wandb_log_interval:
-    value: 50
+    value: 20
   save_model_locally:
     value: true
 early_terminate:

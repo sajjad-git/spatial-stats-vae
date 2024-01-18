@@ -7,29 +7,31 @@ parameters:
   debugging:
     value: false
   seed:
-    value: 127
+    value: 125
   dataset_name:
     values: ["multiple_lines"]
   resume_training:
     value: false
   last_epoch:
-    value: 0
+    value: 0 
   epochs:
-    value: 1500
+    value: 400
   batch_size:
     value: 32
   bottleneck_size:
     values: [9]
   learning_rate:
     values: [0.001]
+  batch_similarity_loss:
+    values: [false]
   a_mse:
-    value: 0.0
+    value: 1.0
   a_content:
     value: 0.0
   a_style:
     value: 0.0
   a_spst:
-    value: 1.0
+    value: 0.0
   beta_max:
     value: 1
   content_layer:
@@ -45,8 +47,6 @@ parameters:
   schedule_KLD:
     values: [false]
   schedule_spst:
-    values: [false]
-  batch_similarity_loss:
     values: [false]
   wandb_log_interval:
     value: 50

@@ -15,15 +15,17 @@ import sys
 sys.path.insert(1, '../data')
 from shapes_dataset import ShapesDataset
 from lines_dataset import LinesDataset
+from diagonal_lines_dataset import DiagonalLinesDataset
 from utils import ThresholdTransform, check_mkdir
 from training_utils import train, validation, MaterialSimilarityLoss, ExponentialScheduler, LossCoefficientScheduler, learning_rate_switcher, get_learning_rate, change_learning_rate, seed_everything, generate_from_noise, write_gradient_stats, read_pixel_values, reconstruct_images
 
-def run_training(epochs, a_mse, a_content, a_style, a_spst, beta, 
+def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
+                include_batch_similarity_loss,
                 content_layer, style_layer, 
                 learning_rate=1e-3, fine_tune_lr=0.0005, 
                 spatial_stat_loss_reduction='mean', normalize_spatial_stat_tensors=False, soft_equality_eps=0.25,
                 batch_size=32, CNN_embed_dim=256, dropout_p=0.2, 
-                log_interval=2, save_interval=20, resume_training=False, last_epoch=0, 
+                log_interval=2, wandb_log_interval=20, resume_training=False, last_epoch=0, save_model_locally=True,
                 schedule_KLD=False, schedule_spst=False, 
                 dataset_name='shapes',
                 debugging=False,
@@ -32,7 +34,9 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     seed_everything(seed)
     
     save_dir = os.path.join(os.getcwd(), "models")
-    run_name = "resnetVAE_" + f"lr{learning_rate}" + f"bs{batch_size}" +\
+    run_name = "resnetVAE_" +\
+                f"_batch_similarity_loss_{include_batch_similarity_loss}" +\
+                f"lr{learning_rate}" + f"bs{batch_size}" +\
                 f"_a_spst_{a_spst}" + f"_KLD_beta_{beta}"+\
                 f"_spst_reduction_loss_{spatial_stat_loss_reduction}" +\
                 f"_KLD_scheduled_{schedule_KLD}" + f"_spatial_stats_loss_scheduled_{schedule_spst}" +\
@@ -69,9 +73,15 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     if dataset_name=='lines':
         data_dir = 'lines'
         dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
+    elif dataset_name=='multiple_lines':
+        data_dir = 'multiple_lines'
+        dataset = LinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
     elif dataset_name=='shapes':
         data_dir = 'shapes'
         dataset = ShapesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
+    elif dataset_name=="three_to_five_lines_diag":
+        data_dir="three_to_five_lines_diag"
+        dataset = DiagonalLinesDataset(os.path.join(os.getcwd(), f'data/{data_dir}/labels.csv'), os.path.join(os.getcwd(), f'data/{data_dir}/images'), transform)
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*0.7), int(len(dataset)) - int(len(dataset)*0.7)])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
@@ -93,6 +103,7 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
     beta_scheduler = ExponentialScheduler(start=0.005, max_val=beta, epochs=epochs) # start = 256/(224*224) = (latent space dim)/(input dim)
     loss_function = MaterialSimilarityLoss(
         device, 
+        include_batch_similarity_loss,
         min_fft_pixel_value, max_fft_pixel_value,
         content_layer=content_layer, style_layer=style_layer, 
         spatial_stat_loss_reduction=spatial_stat_loss_reduction, normalize_spatial_stat_tensors=normalize_spatial_stat_tensors, soft_equality_eps=soft_equality_eps
@@ -132,8 +143,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
         start = time.time()
         X_train, y_train, z_train, mu_train, logvar_train, training_losses, training_input_autocorr, training_recon_autocorr, mse_grads, spst_grads, kld_grads = train(log_interval, vae, loss_function, device, train_loader, optimizer, epoch, save_model_path, a_mse, a_content, a_style, a_spst, beta, debugging)
         X_test, y_test, z_test, mu_test, logvar_test, validation_losses, validation_input_autocorr, validation_recon_autocorr = validation(vae, loss_function, device, valid_loader, a_mse, a_content, a_style, a_spst, beta, debugging)
-        mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, overall_training_loss = training_losses
-        mse_loss, content_loss, style_loss, spst_loss, kld_loss, overall_loss = validation_losses
+        mse_training_loss, content_training_loss, style_training_loss, spst_training_loss, kld_training_loss, tr_batch_diff, overall_training_loss = training_losses
+        mse_loss, content_loss, style_loss, spst_loss, kld_loss, val_batch_diff, overall_loss = validation_losses
         metrics = {
             "mse_training_loss": mse_training_loss, 
             "mse_validation_loss": mse_loss, 
@@ -141,6 +152,8 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             "spatial_stats_validation_loss": spst_loss,
             "KLD_training_loss": kld_training_loss,
             "KLD_validation_loss": kld_loss,
+            "training_batch_diff": tr_batch_diff,
+            "validation_batch_diff": val_batch_diff,
             "overall_training_loss": overall_training_loss,
             "overall_validation_loss": overall_loss,
             "mu_training": mu_train,
@@ -158,22 +171,23 @@ def run_training(epochs, a_mse, a_content, a_style, a_spst, beta,
             a_spst = a_spst_scheduler.step()
             a_mse = 1 - a_spst
         
-        save_condition = True if debugging else (epoch + 1) % save_interval == 0
-        if save_condition:
-            torch.save(vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
-            torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
-            np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
-            np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
-            np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
-            print("Data and model-optimizer params saved successfully.")
+        log_on_wandb = True if debugging else (epoch + 1) % wandb_log_interval == 0
+        if log_on_wandb:
+            if save_model_locally:
+                torch.save(vae.state_dict(), os.path.join(save_model_path, 'model_epoch{}.pth'.format(epoch + 1)))  # save motion_encoder
+                torch.save(optimizer.state_dict(), os.path.join(save_model_path, 'optimizer_epoch{}.pth'.format(epoch + 1)))      # save optimizer
+                np.save(os.path.join(save_model_path, 'X_train_epoch{}.npy'.format(epoch + 1)), X_train) #save last batch
+                np.save(os.path.join(save_model_path, 'y_train_epoch{}.npy'.format(epoch + 1)), y_train)
+                np.save(os.path.join(save_model_path, 'z_train_epoch{}.npy'.format(epoch + 1)), z_train)
+                print("Data and model-optimizer params saved successfully.")
             
-            # save 100 pairs of images
-            orig, recon, orig_autocorr, recon_autocorr = reconstruct_images(vae, valid_loader, device, num_examples=100)
-            np.save(os.path.join(save_model_path, 'original_images_epoch{}.npy'.format(epoch + 1)), orig.numpy())
-            np.save(os.path.join(save_model_path, 'reconstructed_images_epoch{}.npy'.format(epoch + 1)), recon.numpy())
-            np.save(os.path.join(save_model_path, 'original_autocorr_epoch{}.npy'.format(epoch + 1)), orig_autocorr.numpy())
-            np.save(os.path.join(save_model_path, 'reconstructed_autocorr_epoch{}.npy'.format(epoch + 1)), recon_autocorr.numpy())
-            print("Original and reconstructed images and their autocorrelations saved successfully.")
+                # save 100 pairs of images
+                orig, recon, orig_autocorr, recon_autocorr = reconstruct_images(vae, valid_loader, device, num_examples=100)
+                np.save(os.path.join(save_model_path, 'original_images_epoch{}.npy'.format(epoch + 1)), orig.numpy())
+                np.save(os.path.join(save_model_path, 'reconstructed_images_epoch{}.npy'.format(epoch + 1)), recon.numpy())
+                np.save(os.path.join(save_model_path, 'original_autocorr_epoch{}.npy'.format(epoch + 1)), orig_autocorr.numpy())
+                np.save(os.path.join(save_model_path, 'reconstructed_autocorr_epoch{}.npy'.format(epoch + 1)), recon_autocorr.numpy())
+                print("Original and reconstructed images and their autocorrelations saved successfully.")
 
             grid = generate_from_noise(vae, device, 16, loss_function.spst_loss.calculate_two_point_autocorr_pytorch)
             imgs = wandb.Image(grid, caption="(Genearted image for validation, Genearted image autocorrelation)")

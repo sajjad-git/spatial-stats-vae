@@ -7,13 +7,13 @@ parameters:
   debugging:
     value: false
   seed:
-    value: 127
+    value: 125
   dataset_name:
     values: ["multiple_lines"]
   resume_training:
     value: false
   last_epoch:
-    value: 0
+    value: 0 
   epochs:
     value: 1500
   batch_size:
@@ -45,8 +45,6 @@ parameters:
   schedule_KLD:
     values: [false]
   schedule_spst:
-    values: [false]
-  batch_similarity_loss:
     values: [false]
   wandb_log_interval:
     value: 50
