@@ -6,4 +6,4 @@ To run training,
 2. Unzip multiple_lines.zip and place the multiple_lines inside the data folder in the root directory.
 3. Open multiple_lines and unzip images.zip.
 4. Run setup.sh by running ./setup.sh in terminal. If you're running the training for the first time, the code will
-ask for a WandB API key. Enter a valid API key. This command should run the src/models/sweep.py file which contains the configuration parameters used in our tinypaper. To see our tiny paper, see toward_learning_latent_variable.pdf.
+ask for a WandB API key. Enter a valid API key. This command should run the src/models/sweep.py file which contains the configuration parameters used in our tinypaper.
