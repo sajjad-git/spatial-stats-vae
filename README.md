@@ -1,4 +1,4 @@
-# AI-generated-chemical-materials
+# Spatial Stats VAE
 A PyTorch implementation of generative models to generate novel chemical materials.
 
 To run training,
